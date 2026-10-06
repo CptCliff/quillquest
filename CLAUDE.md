@@ -21,5 +21,6 @@ pnpm typecheck
 ```
 
 ## Status
-M1 started: rank ladders, dice mapping, exact odds primitives. Next: applyShifts, setCard, odds(card), resolve, push
-(design plan §4.2) with the §4.4 tests written first.
+M1 (rules engine) is implemented in `packages/rules` with 113 tests: ranks and dice, exact odds and words, shifts and the
+edge rule, Set, resolve, push, battle rolls, wounds and healing, armor, Conviction and Burdens, magic, creation checks.
+Open rule questions are in `docs/m1-notes.md`. Next: M2 (live editor).
