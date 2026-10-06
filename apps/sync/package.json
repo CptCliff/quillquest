@@ -1,0 +1,26 @@
+{
+  "name": "@quillquest/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p .",
+    "dev": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "4.7.0",
+    "@hocuspocus/provider": "4.7.0",
+    "@quillquest/story": "workspace:*",
+    "yjs": "13.6.33",
+    "y-protocols": "^1.0.6",
+    "lib0": "^0.2.100"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  },
+  "exports": {
+    "./auth": "./src/auth.ts"
+  }
+}

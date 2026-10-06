@@ -18,9 +18,17 @@ Browser app for co-writing a narrative step-die RPG. Design: `docs/design-plan.m
 pnpm install
 pnpm test        # vitest, all packages
 pnpm typecheck
+pnpm e2e         # Playwright, two real browsers; starts sync + web itself
 ```
 
 ## Status
-M1 (rules engine) is implemented in `packages/rules` with 113 tests: ranks and dice, exact odds and words, shifts and the
-edge rule, Set, resolve, push, battle rolls, wounds and healing, armor, Conviction and Burdens, magic, creation checks.
-Open rule questions are in `docs/m1-notes.md`. Next: M2 (live editor).
+- M1 rules engine: done (`packages/rules`, 113 tests). Open rule questions in `docs/m1-notes.md`.
+- M2 live editor: done. `packages/story` is the edit policy (shared by browser and server), `apps/sync` is the Hocuspocus
+  server that enforces it on every update, `apps/web` is the Next + TipTap + Yjs workspace. 26 + 14 unit/integration tests,
+  6 Playwright tests. Decisions, measurements and unverified gaps in `docs/m2-notes.md`.
+- Next: M3 (rolls). The lock trigger there is the real caller of `lockThrough`; the dev lock buttons go away.
+
+## Gotchas
+- Dev only: identity is a signed token from `/api/dev-token`; M4 replaces it.
+- pnpm enforces a minimum release age. Don't exclude a package from it to pull in a brand-new release; pin an older one.
+- Playwright runs the preinstalled Chromium (`/opt/pw-browsers`); don't run `playwright install`.

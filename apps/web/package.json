@@ -1,0 +1,39 @@
+{
+  "name": "@quillquest/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p .",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@handlewithcare/prosemirror-suggest-changes": "0.1.8",
+    "@hocuspocus/provider": "4.7.0",
+    "@quillquest/story": "workspace:*",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-collaboration": "3.31.4",
+    "@tiptap/extension-collaboration-caret": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/y-tiptap": "^3.0.7",
+    "next": "16.3.8",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "yjs": "13.6.33",
+    "y-protocols": "^1.0.6",
+    "@tiptap/extension-document": "3.31.4",
+    "@tiptap/extension-paragraph": "3.31.4",
+    "@tiptap/extension-text": "3.31.4",
+    "@quillquest/sync": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@playwright/test": "1.56.1"
+  }
+}
