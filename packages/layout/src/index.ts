@@ -38,16 +38,22 @@ function nextId(l: Layout, prefix: 'g' | 's'): string {
 
 // ---------- normalising ----------
 const round = (x: number) => Math.round(x * 1e6) / 1e6;
-const sizesOk = (a: number[]) => Math.abs(a.reduce((x, y) => x + y, 0) - 100) < 1e-6 && a.every((x) => x >= MIN_SIZE - 1e-9);
+const sizesOk = (a: number[]) => Math.abs(a.reduce((x, y) => x + y, 0) - 100) < 1e-4 && a.every((x) => x >= MIN_SIZE - 1e-9);
 function fixSizes(sizes: number[], n: number): number[] {
-  let s = sizes.length === n && sizes.every((x) => Number.isFinite(x) && x > 0) ? [...sizes] : Array.from({ length: n }, () => 100 / n);
-  const ok = sizesOk;
-  for (let i = 0; i < 20 && !ok(s); i++) {
-    s = s.map((x) => Math.max(x, MIN_SIZE));
-    const sum = s.reduce((x, y) => x + y, 0);
-    s = s.map((x) => (x * 100) / sum);
+  const s = sizes.length === n && sizes.every((x) => Number.isFinite(x) && x > 0) ? sizes : Array.from({ length: n }, () => 100 / n);
+  // Anything under the minimum is pinned to it; the rest share what is left in proportion.
+  const pinned = new Set<number>();
+  let out = s;
+  for (let guard = 0; guard <= n; guard++) {
+    const free = s.map((_, i) => i).filter((i) => !pinned.has(i));
+    const remaining = 100 - pinned.size * MIN_SIZE;
+    const sumFree = free.reduce((a, i) => a + s[i]!, 0);
+    out = s.map((x, i) => (pinned.has(i) ? MIN_SIZE : (x * remaining) / sumFree));
+    const low = free.filter((i) => out[i]! < MIN_SIZE);
+    if (!low.length) break;
+    low.forEach((i) => pinned.add(i));
   }
-  return ok(s) ? s : s.map(round);
+  return out.map(round);
 }
 
 function tidy(n: Node): Node | null {

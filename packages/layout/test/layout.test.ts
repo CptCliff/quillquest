@@ -216,7 +216,7 @@ describe('no operation ever loses or duplicates a panel', () => {
         expect(normalize(l)).toEqual(l);
         for (const s of splits(l.root)) { expect(total(s)).toBeCloseTo(100); expect(s.sizes.every((x) => x >= 8)).toBe(true); expect(s.children.length).toBeGreaterThanOrEqual(2); }
         for (const g of groups(l.root)) { expect(g.tabs.length).toBeGreaterThan(0); expect(g.tabs).toContain(g.active); }
-        if (i % 100 === 0) expect(validateLayout(JSON.parse(JSON.stringify(l)), role).ok).toBe(true);
+        if (i % 100 === 0) { const v = validateLayout(JSON.parse(JSON.stringify(l)), role); expect(v.ok ? 'ok' : (v as { error: string }).error, `step ${i}`).toBe('ok'); }
       }
     }
   });
