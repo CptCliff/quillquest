@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Character, CreationState, PublicNpc } from '@quillquest/rules';
 import { StepForm } from './Forms';
 import { useAct } from './Ledger';
+import { NotifyPrefs } from './NotifyPrefs';
 import { ApiFailure, type AccountApi, type GameApi } from '../lib/game-api';
 import { SheetBody, Tokens } from './Sheet';
 import type { Me } from './StoryEditor';
@@ -61,6 +62,7 @@ export function Roster({ characters, creation, npcs, me, api, accounts, campaign
           ))}
         </>
       )}
+      {!me.left && <NotifyPrefs game={api} onNotice={onNotice} />}
       {me.role !== 'gm' && !me.left && <button type="button" data-testid="leave" onClick={leave}>Leave this campaign</button>}
     </section>
   );

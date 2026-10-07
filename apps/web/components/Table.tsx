@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type * as Y from 'yjs';
 import type { Editor } from '@tiptap/core';
-import { needsAttention, type CanonEntry, type Character, type ConvictionLogEntry, type CreationState, type PublicNpc, type Skill } from '@quillquest/rules';
+import { needsAttention, type CanonEntry, type Character, type ConvictionLogEntry, type CreationState, type PublicBattle, type PublicNpc, type Skill } from '@quillquest/rules';
 import { ApiFailure, type AccountApi, type GameApi, type LedgerCard } from '../lib/game-api';
 import { useYMap } from '../lib/use-ymap';
 import { InfoCard, type OpenCard } from './InfoCard';
 import { NotesPane, type NotesTab, type ZeroState } from './NotesPane';
+import { SpotlightBar, type SpotlightState } from './SpotlightBar';
 import { StoryEditor, type Me } from './StoryEditor';
 
 const SPLIT_KEY = 'qq.split';
@@ -31,13 +32,26 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
   const campaignMap = useYMap<unknown>(doc.getMap('campaign'));
   const npcs = useYMap<PublicNpc>(doc.getMap('npcs'));
   const convictionLog = useYMap<ConvictionLogEntry>(doc.getMap('convictionLog'));
+  const battles = useYMap<PublicBattle>(doc.getMap('battles'));
   const zero = useMemo<ZeroState>(() => ({
-    creation, canon, npcs, convictionLog, phase: (campaignMap.phase as string | undefined) ?? 'sessionZero',
+    creation, canon, npcs, convictionLog, battles, phase: (campaignMap.phase as string | undefined) ?? 'sessionZero',
     crossings: (campaignMap.crossings as ZeroState['crossings'] | undefined) ?? [], overrides: (campaignMap.overrides as ZeroState['overrides'] | undefined) ?? [],
-  }), [creation, canon, npcs, convictionLog, campaignMap]);
+  }), [creation, canon, npcs, convictionLog, battles, campaignMap]);
+  const spotlight = campaignMap.spotlight as SpotlightState | undefined;
   const cards = useMemo(() => Object.values(ledger).sort((a, b) => a.seq - b.seq), [ledger]);
   const mine = useMemo(() => Object.values(characters).find((c) => c.ownerId === me.id) ?? null, [characters, me.id]);
-  const attention = !me.left && cards.some((c) => needsAttention(c, { id: me.id, role: me.role }));
+  const battleAttention = Object.values(battles).some((b) => {
+    if (b.status === 'written') return false;
+    const mineRow = b.contributions.find((c) => c.actorId === me.id);
+    const myChar = b.lead.actorId === me.id ? b.lead.characterId : mineRow?.characterId;
+    if (me.role === 'gm') return (b.status === 'declaring' && b.waitingOn.length === 0) || b.status === 'set' || (b.status === 'rolled' && b.beatsWritten.length > 0);
+    if (!myChar) return false;
+    if (b.status === 'declaring') return (b.lead.actorId === me.id && !b.lead.ready) || mineRow?.status === 'open';
+    if (b.push) return b.push.waiting.includes(myChar);
+    if (b.status === 'rolled' || b.status === 'conceded') return !b.beatsWritten.includes(myChar);
+    return false;
+  });
+  const attention = !me.left && (cards.some((c) => needsAttention(c, { id: me.id, role: me.role })) || battleAttention);
 
   const [editor, setEditor] = useState<Editor | null>(null);
   const [split, setSplit] = useState(62);
@@ -46,10 +60,30 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
   const [openCard, setOpenCard] = useState<OpenCard | null>(null);
   const [focusSheet, setFocusSheet] = useState<string | null>(null);
   const dragging = useRef(false);
+
+  // Deep links from email: ?tab=, ?card=, ?battle=, ?para=. Open the right pane and highlight the thing, once it has loaded.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const tabParam = q.get('tab');
+    const wanted = q.get('battle') ? `battle-${q.get('battle')}` : q.get('card') ? `card-${q.get('card')}` : null;
+    const para = q.get('para');
+    if (tabParam && ['ledger', 'create', 'codex', 'roster', 'director'].includes(tabParam)) { setNotesTab(tabParam as NotesTab); setTab('notes'); }
+    if (wanted) { setNotesTab('ledger'); setTab('notes'); }
+    if (para) setTab('story');
+    if (!wanted && !para) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      const el = wanted ? document.getElementById(wanted) : document.querySelector<HTMLElement>(`.story p[data-paragraph-id="${CSS.escape(para!)}"]`);
+      if (el) { el.scrollIntoView({ block: 'center' }); el.dataset.focus = 'true'; clearInterval(timer); }
+      else if (++tries > 40) clearInterval(timer);
+    }, 250);
+    return () => clearInterval(timer);
+  }, []);
   useEffect(() => setSplit(loadSplit()), []);
 
   // Names and inks for every member, connected or not (paragraph tags and colors).
   const [members, setMembers] = useState<Record<string, { name: string; color: string }>>({});
+  const names = useMemo(() => Object.fromEntries(Object.entries(members).map(([id, m]) => [id, m.name])), [members]);
   const [inkVersion, setInkVersion] = useState(0);
   useEffect(() => {
     let live = true;
@@ -130,6 +164,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
             onLeft={() => window.location.assign('/')} />
         </section>
       </main>
+      <SpotlightBar spotlight={spotlight} me={me} names={names} game={game} onNotice={onNotice} />
     </div>
   );
 }

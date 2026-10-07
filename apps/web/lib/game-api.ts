@@ -1,4 +1,4 @@
-import type { Character, ConcessionKind, Draft, DiceView, Nomination, Npc, NpcField, OutcomePrompt, PublicCard } from '@quillquest/rules';
+import type { BattleDiceView, Character, ConcessionKind, Draft, DiceView, Nomination, Npc, NpcField, OutcomePrompt, PublicBattle, PublicCard } from '@quillquest/rules';
 import type { Draft as AiDraft, SuggestionKind } from '@quillquest/prompts';
 
 export type LedgerCard = PublicCard & { seq: number };
@@ -25,7 +25,7 @@ export type CardPatchBody = Partial<{
   skillName: string; gmMarkedBig: boolean;
 }>;
 
-export interface Settings { themes: string; faces: string[]; cap: number; sessionNo: number; used: number; configured: boolean }
+export interface Settings { themes: string; faces: string[]; cap: number; stallHours: number; pushWindowMinutes: number; sessionNo: number; used: number; configured: boolean }
 export interface SuggestionRow { id: string; userId: string; kind: SuggestionKind; input: unknown; output: unknown; status: 'shown' | 'used' | 'edited' | 'dismissed' | 'failed'; sessionNo: number; provider: string; createdAt: string }
 export interface AskResult { suggestion: { id: string; kind: SuggestionKind; draft: AiDraft; cached?: boolean }; remaining: number }
 
@@ -96,7 +96,7 @@ export class GameApi {
   importDraft = () => this.call<{ done: true }>('POST', '/draft/import');
   // ---- the Director and Claude -----------------------------------------------------------------------------------------
   director = () => this.call<{ nominations: Nomination[]; npcs: Npc[]; settings: Settings }>('GET', '/director');
-  saveSettings = (s: { themes?: string; faces?: string[]; cap?: number }) => this.call<{ themes: string; faces: string[]; cap: number }>('PUT', '/settings', s);
+  saveSettings = (s: { themes?: string; faces?: string[]; cap?: number; stallHours?: number; pushWindowMinutes?: number }) => this.call<{ themes: string; faces: string[]; cap: number }>('PUT', '/settings', s);
   startSession = () => this.call<{ sessionNo: number }>('POST', '/session/start');
   nominate = (b: { characterId: string; kind: string; beliefId?: string; note: string }) => this.call<unknown>('POST', '/conviction/nominate', b);
   awardNomination = (nominationId: string) => this.call<unknown>('POST', '/conviction/award', { nominationId });
@@ -108,6 +108,28 @@ export class GameApi {
   ask = (kind: SuggestionKind, params: Record<string, unknown>) => this.call<AskResult>('POST', `/llm/${kind}`, params);
   suggestions = () => this.call<{ suggestions: SuggestionRow[] }>('GET', '/suggestions');
   suggestionStatus = (id: string, status: 'used' | 'edited' | 'dismissed') => this.call<{ updated: true }>('POST', `/suggestions/${id}/status`, { status });
+  // ---- battles, the spotlight, notifications ---------------------------------------------------------------------------------
+  private battle = (id: string, action: string, body?: unknown) => this.call<{ battle: PublicBattle }>('POST', `/battles/${id}/${action}`, body ?? {});
+  openBattle = (b: { goal: string; battleDanger: string; difficulty: string; dangerRank: string; leadCharacterId: string; framingParagraphId?: string }) => this.call<{ battle: PublicBattle }>('POST', '/battles', b);
+  battleLead = (id: string, patch: Record<string, unknown>) => this.call<{ battle: PublicBattle }>('PATCH', `/battles/${id}/lead`, patch);
+  declare = (id: string, b: Record<string, unknown>) => this.battle(id, 'declare', b);
+  concedeContribution = (id: string) => this.battle(id, 'concede');
+  skipContributor = (id: string, characterId: string) => this.battle(id, 'skip', { characterId });
+  setBattle = (id: string, adjust: { difficulty?: string; dangers?: Record<string, string> } = {}) => this.battle(id, 'set', adjust);
+  rollBattle = (id: string) => this.battle(id, 'roll');
+  pushBattle = (id: string, kind: 'standard' | 'conviction') => this.battle(id, 'push', { kind });
+  answerPush = (id: string, answer: 'withdraw' | 'stay') => this.battle(id, 'answer', { answer });
+  resolvePush = (id: string, force = false) => this.battle(id, 'resolve-push', { force });
+  concedeBattle = (id: string, kind: string) => this.battle(id, 'concede-battle', { kind });
+  beat = (id: string, b: { text: string; cost?: { text: string; woundName?: string; woundLevel?: string; burdenName?: string } }) => this.battle(id, 'beat', b);
+  orderBeats = (id: string, ids: string[]) => this.battle(id, 'order', { ids });
+  stitch = (id: string, skipMissing = false) => this.battle(id, 'stitch', { skipMissing });
+  revealBattle = (id: string) => this.battle(id, 'reveal');
+  battleDice = (id: string) => this.call<{ dice: BattleDiceView }>('GET', `/battles/${id}/dice`);
+  passSpotlight = (to: string) => this.call<{ holder: string | null }>('POST', '/spotlight/pass', { to });
+  takeSpotlight = () => this.call<{ holder: string | null }>('POST', '/spotlight/take');
+  prefs = () => this.call<{ mode: 'immediate' | 'digest' | 'off'; hasEmail: boolean }>('GET', '/prefs');
+  savePrefs = (mode: 'immediate' | 'digest' | 'off') => this.call<{ mode: string }>('PUT', '/prefs', { mode });
   layDown = (characterId: string, burdenId: string, body: { kind: 'trait' | 'beliefRewrite'; text: string }) =>
     this.call<{ character: Character }>('POST', `/characters/${characterId}/burdens/${burdenId}/lay-down`, body);
 }

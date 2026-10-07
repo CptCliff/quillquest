@@ -7,7 +7,8 @@ import type { Draft, SuggestionKind } from '@quillquest/prompts';
 import { ApiFailure, type GameApi, type LedgerCard, type Settings, type SuggestionRow } from '../lib/game-api';
 import { useSession } from '../lib/session';
 import { StepForm } from './Forms';
-import { useAct } from './Ledger';
+import { myParagraphs, useAct } from './Ledger';
+import type { Editor } from '@tiptap/core';
 import { StoryEditor, type Me } from './StoryEditor';
 
 type Notice = (message: string) => void;
@@ -25,8 +26,8 @@ function draftText(draft: Draft, faces: string[]): string {
 }
 
 /** The GM's Director tab (design plan 8.1): Beliefs board, pending cards, Conviction, NPCs, notes, the Claude assistant, overrides, settings. */
-export function Director({ game, characters, cards, convictionLog, overrides, me, campaign, onNotice }: {
-  game: GameApi; characters: Record<string, Character>; cards: LedgerCard[]; convictionLog: Record<string, ConvictionLogEntry>; overrides: CheckOverride[]; me: Me; campaign: string; onNotice: Notice;
+export function Director({ game, characters, cards, convictionLog, overrides, me, campaign, editor, onNotice }: {
+  editor: Editor | null; game: GameApi; characters: Record<string, Character>; cards: LedgerCard[]; convictionLog: Record<string, ConvictionLogEntry>; overrides: CheckOverride[]; me: Me; campaign: string; onNotice: Notice;
 }) {
   const { busy, run } = useAct(onNotice);
   const [data, setData] = useState<{ nominations: Nomination[]; npcs: Npc[]; settings: Settings } | null>(null);
@@ -86,6 +87,21 @@ export function Director({ game, characters, cards, convictionLog, overrides, me
           {c.burdens.filter((b) => b.status === 'active').map((b) => <div key={b.id}>Burden: {b.name}</div>)}
         </article>
       ))}
+
+      <h3>Battle</h3>
+      {players.length > 0 && (
+        <StepForm testId="battle-open" label="Open a battle" run={run} busy={busy}
+          fields={[
+            { key: 'goal', label: 'The goal: what winning gets' },
+            { key: 'battleDanger', label: 'The battle\'s Danger: what losing costs' },
+            { key: 'difficulty', label: 'The opposition\'s Difficulty', kind: 'select', options: DIFFICULTY_RANKS.filter((r) => r !== 'Trivial').map((r) => ({ value: r, label: r })), initial: 'Hard' },
+            { key: 'dangerRank', label: 'The battle\'s Danger rank', kind: 'select', options: DANGER_RANKS.map((r) => ({ value: r, label: r })), initial: 'Serious' },
+            { key: 'leadCharacterId', label: 'The lead', kind: 'select', options: players.map((p) => ({ value: p.id, label: p.name })) },
+            { key: 'framingParagraphId', label: 'Your framing post (optional)', kind: 'select', options: [{ value: '', label: 'none' }, ...(editor ? myParagraphs(editor, me.id) : []).map((p) => ({ value: p.id, label: p.text }))] },
+          ]}
+          submit={(v) => game.openBattle({ goal: String(v.goal), battleDanger: String(v.battleDanger), difficulty: String(v.difficulty), dangerRank: String(v.dangerRank), leadCharacterId: String(v.leadCharacterId), framingParagraphId: v.framingParagraphId ? String(v.framingParagraphId) : undefined })} />
+      )}
+      <p className="muted">Battles appear in the Ledger tab, where you Set, Roll and stitch them.</p>
 
       <h3>Pending cards</h3>
       {pending.length === 0 && <p className="muted" data-testid="no-pending">Nothing is waiting on you.</p>}
@@ -196,10 +212,12 @@ function SettingsForm({ settings, game, run, busy, reload }: { settings: Setting
           { key: 'themes', label: 'Themes to handle lightly or leave out (every Claude prompt carries these)', initial: settings.themes },
           ...[0, 1, 2, 3, 4, 5].map((i) => ({ key: `f${i}`, label: `Burden face ${i + 1}`, initial: settings.faces[i] ?? '' })),
           { key: 'cap', label: 'Claude calls allowed per session (0 turns it off)', initial: String(settings.cap) },
+          { key: 'stallHours', label: 'Remind me when a card or battle has waited this many hours (0 is off)', initial: String(settings.stallHours) },
+          { key: 'pushWindow', label: 'Minutes contributors have to withdraw when the lead pushes', initial: String(settings.pushWindowMinutes) },
         ]}
         submit={async (v) => {
           const faces = [0, 1, 2, 3, 4, 5].map((i) => String(v[`f${i}`]).trim());
-          await game.saveSettings({ themes: String(v.themes), faces: faces.every(Boolean) ? faces : [], cap: Number(v.cap) });
+          await game.saveSettings({ themes: String(v.themes), faces: faces.every(Boolean) ? faces : [], cap: Number(v.cap), stallHours: Number(v.stallHours), pushWindowMinutes: Number(v.pushWindow) } as never);
           reload();
         }} />
       <button type="button" data-testid="start-session" disabled={busy} onClick={() => { if (window.confirm('Start a new session? Beliefs may earn Conviction again and the Claude call count restarts.')) run(async () => { await game.startSession(); reload(); }); }}>Start a new session</button>

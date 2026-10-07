@@ -1,7 +1,8 @@
 'use client';
 import type { Editor } from '@tiptap/core';
-import type { CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, PublicNpc } from '@quillquest/rules';
+import type { CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, PublicBattle, PublicNpc } from '@quillquest/rules';
 import type { AccountApi, GameApi, LedgerCard } from '../lib/game-api';
+import { Battles } from './Battles';
 import { Creation } from './Creation';
 import { Director } from './Director';
 import { Ledger } from './Ledger';
@@ -14,7 +15,7 @@ import { TablePanel } from './TablePanel';
 export type NotesTab = 'ledger' | 'create' | 'codex' | 'roster' | 'director';
 
 /** Session-zero state from the server-written maps. */
-export interface ZeroState { creation: Record<string, CreationState>; canon: Record<string, CanonEntry>; phase: string; crossings: CrossingProposal[]; overrides: CheckOverride[]; npcs: Record<string, PublicNpc>; convictionLog: Record<string, ConvictionLogEntry> }
+export interface ZeroState { creation: Record<string, CreationState>; canon: Record<string, CanonEntry>; phase: string; crossings: CrossingProposal[]; overrides: CheckOverride[]; npcs: Record<string, PublicNpc>; convictionLog: Record<string, ConvictionLogEntry>; battles: Record<string, PublicBattle> }
 
 /** The Notes pane (design plan 5.2): Ledger and Roster are live; the GM's tab holds the table and invites; Codex arrives in M6. */
 export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, campaign, editor, onNotice, openCharacter, openSkill, focusSheet, attention, onLeft, zero }: {
@@ -39,6 +40,7 @@ export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, c
       </div>
       {tab === 'ledger' && (
         <>
+          <Battles battles={zero.battles} characters={characters} me={me} game={game} onNotice={onNotice} />
           <Ledger cards={cards} character={me.left ? null : mine} env={{ api: game, me, characters, editor, onNotice, openCharacter }} />
           {editor && <SuggestionsPanel editor={editor} userId={me.id} />}
         </>
@@ -57,7 +59,7 @@ export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, c
       )}
       {tab === 'director' && me.role === 'gm' && (
         <>
-          <Director game={game} characters={characters} cards={cards} convictionLog={zero.convictionLog} overrides={zero.overrides} me={me} campaign={campaign} onNotice={onNotice} />
+          <Director game={game} characters={characters} cards={cards} convictionLog={zero.convictionLog} overrides={zero.overrides} me={me} campaign={campaign} editor={editor} onNotice={onNotice} />
           <SessionZero game={game} characters={characters} creation={zero.creation} canon={zero.canon} phase={zero.phase} overrides={zero.overrides} onNotice={onNotice} />
           <TablePanel accounts={accounts} campaign={campaign} onNotice={onNotice} />
         </>

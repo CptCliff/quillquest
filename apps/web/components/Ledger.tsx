@@ -269,7 +269,7 @@ function ActiveCard({ card, env }: { card: LedgerCard; env: Env }) {
   const owner = me.id === card.actorId;
   const [concession, setConcession] = useState<ConcessionKind>(CONCESSION_KINDS[0]);
   return (
-    <article className="card" data-testid="card" data-status={card.status} data-speed={card.speed}>
+    <article className="card" data-testid="card" id={`card-${card.id}`} data-card={card.id} data-status={card.status} data-speed={card.speed}>
       <header>
         <button type="button" className="linklike" data-testid="card-name" onClick={() => env.openCharacter(card.characterId)}><strong>{nameOf(characters, card.characterId)}</strong></button> · {card.skillName} <span className="badge" data-testid="card-speed">{card.speed === 'big' ? 'Big roll' : 'Quick roll'}</span>{' '}
         <span className="badge" data-testid="card-status">{STATUS_LABELS[card.status]}</span>

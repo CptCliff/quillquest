@@ -117,3 +117,32 @@ a { color: inherit; }
 .gm-notes { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--bg); font-family: Georgia, serif; }
 .stepform { margin: 8px 0; }
 .stepform h4 { margin: 8px 0 4px; font-size: 13px; }
+
+/* Battles, the spotlight bar, deep-link focus */
+.battle header { margin-bottom: 4px; }
+.battle ul { margin: 4px 0; padding-left: 18px; }
+.battle .gm-controls { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.battle pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+.battle[data-focus='true'], .card[data-focus='true'] { outline: 3px solid var(--fg); }
+.story p[data-focus='true'] { outline: 2px dashed var(--fg); outline-offset: 2px; }
+.spotlight { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); font: 14px system-ui, sans-serif; }
+.spotlight[data-mine='true'] { background: var(--ins-bg); color: var(--ins-fg); }
+.spotlight .row { margin: 0; }
+
+/* Phone: tap targets, no sideways scroll, forms that fit 360px */
+@media (max-width: 760px) {
+  html, body { overflow-x: hidden; }
+  header { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  button, select, .tabs button { min-height: 44px; }
+  .field input, .field textarea, .field select, .row input, .row select, input, textarea, select { font-size: 16px; max-width: 100%; }
+  .story-pane, .notes-pane { padding: 12px; overflow-x: hidden; }
+  .card, .sheet, .battle { max-width: 100%; overflow-wrap: anywhere; }
+  .row { flex-wrap: wrap; }
+  .row input, .row select { flex: 1 1 100%; }
+  .spotlight { padding: 8px 12px; gap: 8px; }
+  .spotlight .row { width: 100%; }
+  .spotlight .row select { flex: 1 1 60%; }
+  .battle pre { overflow-x: auto; max-width: 100%; }
+  .note-tabs button { flex: 1 1 auto; }
+  .linklike { min-height: 44px; display: inline-flex; align-items: center; }
+}
