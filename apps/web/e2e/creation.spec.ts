@@ -100,6 +100,13 @@ test('a GM and three players complete session zero, then play: grants, a swap, c
   await open(pages.tobin); await open(pages.wren);
   await pages.tobin.getByTestId('propose-skill-mira-pc-0-skill').fill('Climb');
   await pages.tobin.getByTestId('propose-skill-mira-pc-0-go').click();
+  await expect(pages.tobin.getByTestId('propose-skill-mira-pc-0-result')).toHaveText('Saved.'); // a result shown beside the button, not only a banner out of sight
+  // A mistaken proposal can be taken back: it falls away, then Tobin proposes again.
+  await grant(pages.tobin, 0, 'skill').getByTestId('withdraw').click();
+  await expect(grant(pages.tobin, 0, 'skill').getByTestId('proposal')).toHaveCount(0);
+  await pages.tobin.getByTestId('propose-skill-mira-pc-0-skill').fill('Climb');
+  await pages.tobin.getByTestId('propose-skill-mira-pc-0-go').click();
+  await expect(grant(pages.tobin, 0, 'skill').getByTestId('proposal')).toContainText('Climb');
   await pages.wren.getByTestId('propose-skill-mira-pc-0-skill').fill('Persuade');
   await pages.wren.getByTestId('propose-skill-mira-pc-0-mode').selectOption('raise');
   await pages.wren.getByTestId('propose-skill-mira-pc-0-go').click();

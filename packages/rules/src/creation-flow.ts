@@ -229,6 +229,17 @@ export function acceptProposal(w: W, actor: CreationActor, a: { characterId: str
   return commit(w, a.characterId, a.chapter, a.part, { ...slot, proposals } as never, others);
 }
 
+/** Take back your own vote on a grant (a mistaken proposal): a proposal nobody else backs falls away with it. */
+export function withdrawVote(w: W, actor: CreationActor, a: { characterId: string; chapter: number; part: Part }): W {
+  const others = asGrantor(w, actor, a.characterId);
+  const { ch } = grantCtx(w, a.characterId, a.chapter);
+  const slot = ch[a.part] as GrantSlot<SkillProposal & TraitProposal, unknown>;
+  if (slot.applied) no('GRANT_APPLIED', 'That grant is already settled');
+  if (!slot.proposals.some((p) => p.accepts.includes(actor.id))) no('NO_VOTE', 'You have no vote on this grant to withdraw');
+  const proposals = slot.proposals.map((p) => ({ ...p, accepts: p.accepts.filter((u) => u !== actor.id) })).filter((p) => p.accepts.length);
+  return commit(w, a.characterId, a.chapter, a.part, { ...slot, proposals } as never, others);
+}
+
 export function gmResolveGrant(w: W, actor: CreationActor, a: { characterId: string; chapter: number; part: Part; proposalId?: string; value?: string }): W {
   if (actor.role !== 'gm') no('NOT_ALLOWED', 'Only the GM resolves a grant');
   const { c, ch } = grantCtx(w, a.characterId, a.chapter);

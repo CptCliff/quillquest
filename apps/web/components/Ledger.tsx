@@ -17,7 +17,9 @@ interface MyParagraph { id: string; text: string; locked: boolean }
 export function myParagraphs(editor: Editor | null, meId: string): MyParagraph[] {
   const out: MyParagraph[] = [];
   editor?.state.doc.forEach((n) => {
-    if (n.attrs.paragraphId && n.attrs.authorId === meId) out.push({ id: n.attrs.paragraphId, text: n.textContent.slice(0, 48) || '(empty)', locked: !!n.attrs.locked });
+    const text = n.textContent.trim();
+    // An empty paragraph is not something to post, and the pickers only fill up with "(empty)" if they list it.
+    if (n.attrs.paragraphId && n.attrs.authorId === meId && text) out.push({ id: n.attrs.paragraphId, text: text.length > 60 ? `${text.slice(0, 59)}…` : text, locked: !!n.attrs.locked });
   });
   return out;
 }
@@ -318,6 +320,7 @@ function NewRoll({ env, character }: { env: Env; character: Character }) {
   const [skill, setSkill] = useState(character.skills[0]?.name ?? '__other');
   const [other, setOther] = useState('');
   const name = skill === '__other' ? other.trim() : skill;
+  const [problem, setProblem] = useState<string | null>(null);
   return (
     <div className="new-roll" data-testid="new-roll">
       <label className="field"><span>Skill</span>
@@ -327,7 +330,8 @@ function NewRoll({ env, character }: { env: Env; character: Character }) {
         </select>
       </label>
       {skill === '__other' && <input aria-label="Skill name" placeholder="What are you attempting?" value={other} onChange={(e) => setOther(e.target.value)} />}
-      <button disabled={busy || !name} data-testid="new-roll-open" onClick={() => run(() => env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }))}>New roll</button>
+      <button disabled={busy || !name} data-testid="new-roll-open" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>New roll</button>
+      {problem && <span role="alert" className="form-error" data-testid="new-roll-problem">{problem}</span>}
     </div>
   );
 }

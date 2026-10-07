@@ -1,6 +1,6 @@
 import {
   acceptProposal, addWorldFact, beginPlay, chooseHook, chooseOutput, confirmCrossing, declineCrossing, finishCreation, gmResolveGrant, overrideCheck,
-  pickOrigin, postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact,
+  pickOrigin, postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, withdrawVote, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact,
   startingBurden, swapGrant, type ChapterOutput, type CreationActor, type CreationWorld,
 } from '@quillquest/rules';
 import type { StoryDoc } from '@quillquest/story';
@@ -50,6 +50,7 @@ export const ACTIONS: Record<string, Handler> = {
   'propose-skill': (w, a, b) => proposeSkill(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), skill: s(b, 'skill'), mode: b.mode === 'raise' ? 'raise' : 'new' }),
   'propose-trait': (w, a, b) => proposeTrait(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), trait: s(b, 'trait') }),
   accept: (w, a, b) => acceptProposal(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b), proposalId: s(b, 'proposalId') }),
+  withdraw: (w, a, b) => withdrawVote(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b) }),
   'gm-resolve': (w, a, b) => gmResolveGrant(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b), proposalId: os(b, 'proposalId'), value: os(b, 'value') }),
   swap: (w, a, b) => swapGrant(w, a, { chapter: n(b, 'chapter'), part: part(b) }),
   output: (w, a, b) => chooseOutput(w, a, { chapter: n(b, 'chapter'), output: output(b) }),

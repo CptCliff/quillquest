@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RuleViolation, acceptProposal, addCreatingCharacter, addReadyCharacter, addWorldFact, beginPlay, canRoll, chooseHook, chooseOutput, confirmCrossing,
   declineCrossing, draftProblems, emptyWorld, endCheck, finishCreation, gmResolveGrant, importDraft, majorityOf, overrideCheck, pickOrigin,
-  postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact, startingBurden, swapGrant,
+  postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, withdrawVote, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact, startingBurden, swapGrant,
   othersOf, slotState, newCharacter, type CreationWorld, type CreationActor,
 } from '../src';
 
@@ -178,6 +178,13 @@ describe('grant cards (7.3)', () => {
     const slot = st(w, 'ilse').chapters[0]!.skill;
     expect(slot.applied).toMatchObject({ name: 'Climb' });
     expect(slot.proposals.find((x) => x.id === b!.id)?.accepts ?? []).not.toContain('rook');
+  });
+  it('a player can withdraw their own vote; an unbacked proposal falls away, a backed one stays', () => {
+    let w = proposeSkill(posted(), sella, { characterId: 'ilse-pc', chapter: 0, skill: 'Climb', mode: 'new' });
+    w = withdrawVote(w, sella, { characterId: 'ilse-pc', chapter: 0, part: 'skill' });
+    expect(st(w, 'ilse').chapters[0]!.skill.proposals).toEqual([]);
+    fails(() => withdrawVote(w, sella, { characterId: 'ilse-pc', chapter: 0, part: 'skill' }), 'NO_VOTE');
+    fails(() => withdrawVote(w, ilse, { characterId: 'ilse-pc', chapter: 0, part: 'skill' }), 'NOT_ALLOWED');
   });
   it('only another player proposes or accepts: not the writer, not the GM, not a stranger', () => {
     const w = posted();

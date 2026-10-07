@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { ApiFailure } from '../lib/game-api';
 
 export interface FieldSpec {
   key: string;
@@ -23,12 +24,18 @@ export function StepForm({ testId, title, fields, submit, label = 'Save', disabl
 }) {
   const start = () => Object.fromEntries(fields.map((f) => [f.key, f.initial ?? (f.kind === 'check' ? false : f.kind === 'select' ? (f.options?.[0]?.value ?? '') : '')]));
   const [v, setV] = useState<Record<string, string | boolean>>(start);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const val = (f: FieldSpec) => (f.key in v ? v[f.key]! : (f.initial ?? (f.kind === 'check' ? false : f.kind === 'select' ? (f.options?.[0]?.value ?? '') : '')));
   return (
     <form className="stepform" data-testid={testId} onSubmit={(e) => {
       e.preventDefault();
       const values = Object.fromEntries(fields.map((f) => [f.key, val(f)]));
-      run(async () => { await submit(values); setV((cur) => Object.fromEntries(Object.entries(cur).map(([k, x]) => [k, fields.find((f) => f.key === k)?.kind === 'select' ? x : typeof x === 'boolean' ? false : '']))); });
+      setResult(null);
+      run(async () => {
+        try { await submit(values); } catch (err) { setResult({ ok: false, text: err instanceof ApiFailure ? err.message : 'That did not save. Try again.' }); throw err; }
+        setResult({ ok: true, text: 'Saved.' });
+        setV((cur) => Object.fromEntries(Object.entries(cur).map(([k, x]) => [k, fields.find((f) => f.key === k)?.kind === 'select' ? x : typeof x === 'boolean' ? false : ''])));
+      });
     }}>
       {title && <h4>{title}</h4>}
       {fields.map((f) => (
@@ -48,6 +55,7 @@ export function StepForm({ testId, title, fields, submit, label = 'Save', disabl
         )
       ))}
       <button type="submit" data-testid={`${testId}-go`} disabled={disabled || busy}>{label}</button>
+      {result && <span role={result.ok ? 'status' : 'alert'} className={result.ok ? 'form-ok' : 'form-error'} data-testid={`${testId}-result`}>{result.text}</span>}
       {secondary && <button type="button" data-testid={`${testId}-${secondary.testId}`} disabled={disabled || busy} onClick={() => run(() => secondary.onClick(Object.fromEntries(fields.map((f) => [f.key, val(f)]))))}>{secondary.label}</button>}
     </form>
   );

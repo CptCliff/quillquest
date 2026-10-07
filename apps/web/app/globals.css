@@ -195,3 +195,8 @@ a { color: inherit; }
 .menu-heading { padding: var(--space-1) var(--space-3); font: 600 var(--text-xs) var(--font-ui); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
 .menu-check { width: 1em; display: inline-block; }
 @media (max-width: 760px) { .menu-text { display: none; } }
+
+/* Inline result of a small form: saved, or why it did not save (the page-level notice is out of sight in a long panel). */
+.form-ok, .form-error { display: inline-block; margin-left: var(--space-2); padding: 2px var(--space-2); border-radius: var(--radius-s, 4px); font: var(--text-m) var(--font-ui); }
+.form-ok { background: var(--ok-bg); color: var(--ok-fg); }
+.form-error { background: var(--bad-bg); color: var(--bad-fg); }

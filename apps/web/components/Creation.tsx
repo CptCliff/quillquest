@@ -110,7 +110,7 @@ export function Creation(p: CreationProps) {
         <StepForm testId="capital" label="Save Capital" run={run} busy={busy}
           fields={[
             ...st.standingPrompts.map((c): FieldSpec => ({ key: `standing:${c}`, label: `How is ${c} seen? (you named it)`, kind: 'select', options: STANDING, initial: mine.standing[c] ?? 'Unknown' })),
-            ...[1, 2, 3].flatMap((i): FieldSpec[] => [{ key: `pn${i}`, label: `Possession ${i} (optional)` }, { key: `ps${i}`, label: `Its story, in a line` }]),
+            ...[1, 2, 3].flatMap((i): FieldSpec[] => [{ key: `pn${i}`, label: `Possession ${i} (optional)` }, { key: `ps${i}`, label: `Possession ${i}: its story, in a line` }]),
           ]}
           submit={(v) => act('capital', {
             standing: Object.fromEntries(st.standingPrompts.map((c) => [c, v[`standing:${c}`] || 'Unknown'])),
@@ -170,8 +170,8 @@ function ChapterBlock({ ch, st, others, run, busy, act }: {
       {ch.output ? <div>Output: {ch.output.kind} — {ch.output.text}</div> : (
         <StepForm testId={`output-${ch.index}`} title="What does this chapter leave you?" label="Save output" run={run} busy={busy}
           fields={[
-            { key: 'kind', label: 'It leaves', kind: 'select', options: ch.endsBadly ? [{ value: 'thread', label: 'A Thread (the bad chapter must)' }] : [{ value: 'connection', label: 'A Connection' }, { value: 'resource', label: 'A Resource' }, { value: 'thread', label: 'A Thread' }] },
-            { key: 'text', label: 'In a line' },
+            { key: 'kind', label: `Chapter ${ch.index + 1} leaves you`, kind: 'select', options: ch.endsBadly ? [{ value: 'thread', label: 'A Thread (the bad chapter must)' }] : [{ value: 'connection', label: 'A Connection' }, { value: 'resource', label: 'A Resource' }, { value: 'thread', label: 'A Thread' }] },
+            { key: 'text', label: 'What this chapter leaves you, in a line' },
             { key: 'withCharacterId', label: 'A Connection with (optional)', kind: 'select', options: [{ value: '', label: 'no one in particular' }, ...others.map((c) => ({ value: c.id, label: c.name }))] },
             { key: 'raise', label: 'A Resource raises', kind: 'select', options: [{ value: 'wealth', label: 'Wealth' }, { value: 'network', label: 'Network' }] },
           ]}
@@ -258,14 +258,15 @@ function GrantCards({ me, others, characters, creation, run, busy, act, game }: 
                   return (
                     <div key={q.id} className="row" data-testid="proposal">
                       <span>{q.skill ? `${q.skill} (${q.mode === 'raise' ? 'raise a rank' : 'new, Trained'})` : q.trait} — {who(q.by)}, {q.accepts.length} agree</span>
+                      {q.accepts.includes(me.id) && <button type="button" className="linklike" data-testid="withdraw" disabled={busy} onClick={() => run(() => act('withdraw', { characterId: c.id, chapter: ch.index, part }))}>Withdraw my vote</button>}
                       {!q.accepts.includes(me.id) && <button type="button" data-testid="accept" disabled={busy} onClick={() => run(() => act('accept', { characterId: c.id, chapter: ch.index, part, proposalId: q.id }))}>Agree</button>}
                     </div>
                   );
                 })}
                 <StepForm testId={`propose-${part}-${c.id}-${ch.index}`} label="Propose" run={run} busy={busy}
                   fields={part === 'skill'
-                    ? [{ key: 'skill', label: 'A Skill' }, { key: 'mode', label: 'It is', kind: 'select', options: [{ value: 'new', label: 'New, at Trained' }, { value: 'raise', label: 'One they have, raised a rank' }] }]
-                    : [{ key: 'trait', label: ch.endsBadly ? 'A harmful Trait' : 'A Trait' }]}
+                    ? [{ key: 'skill', label: `A Skill for ${c.name}, chapter ${ch.index + 1}` }, { key: 'mode', label: `Skill type for ${c.name}, chapter ${ch.index + 1}`, kind: 'select', options: [{ value: 'new', label: 'New, at Trained' }, { value: 'raise', label: 'One they have, raised a rank' }] }]
+                    : [{ key: 'trait', label: `${ch.endsBadly ? 'A harmful Trait' : 'A Trait'} for ${c.name}, chapter ${ch.index + 1}` }]}
                   submit={(v) => act(part === 'skill' ? 'propose-skill' : 'propose-trait', { characterId: c.id, chapter: ch.index, ...(part === 'skill' ? { skill: v.skill, mode: v.mode } : { trait: v.trait }) })} />
               </div>
             );

@@ -47,7 +47,7 @@ export function NotesPanel({ panel: tab, cards, characters, me, game, accounts, 
       {tab === 'codex' && (
         <section aria-label="Canon" data-testid="canon">
           <h3>Canon</h3>
-          {Object.keys(zero.canon).length === 0 && <p className="muted">Nothing is established yet. The full Codex and the Conviction log arrive with the Director tools (M6).</p>}
+          {Object.keys(zero.canon).length === 0 && <p className="muted">Nothing is established yet. Facts the table agrees on in session zero appear here.</p>}
           <ul>{Object.values(zero.canon).map((e) => <li key={e.id} data-testid="canon-entry">{e.text}</li>)}</ul>
           <h3>Conviction log</h3>
           {Object.keys(zero.convictionLog).length === 0 && <p className="muted">No Conviction has been awarded yet.</p>}
