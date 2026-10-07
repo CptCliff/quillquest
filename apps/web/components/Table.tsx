@@ -185,7 +185,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
           <>
             <nav className="tabs" aria-label="Panes">
               <button aria-pressed={phoneTab === 'story'} onClick={() => setPhoneTab('story')}>Story</button>
-              <button aria-pressed={phoneTab === 'notes'} data-testid="phone-notes-tab" onClick={() => setPhoneTab('notes')}>{attention ? 'Notes •' : 'Notes'}</button>
+              <button aria-pressed={phoneTab === 'notes'} data-testid="phone-notes-tab" onClick={() => { setPhoneTab('notes'); if (creating && phoneList.includes('create')) setPhoneNote('create'); }}>{creating ? 'Notes: create your character •' : attention ? 'Notes •' : 'Notes'}</button>
             </nav>
             <main id="main" data-tab={phoneTab} tabIndex={-1}>
               <div className="phone-story"><Slot panel="story" /></div>

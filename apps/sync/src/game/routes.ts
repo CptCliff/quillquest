@@ -250,6 +250,7 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
       }
       const cardId = rest[1];
       const action = rest[2];
+      if (cardId && !action && method === 'DELETE') return ok(await svc.discard(campaign, actor, cardId));
       if (cardId && !action && method === 'PATCH') return ok({ card: await svc.editCard(campaign, actor, cardId, (await readJson(req)) as ClientPatch) });
       if (cardId && action === 'preview' && method === 'GET') return ok(await svc.preview(campaign, actor, cardId));
       if (cardId && action === 'prompt' && method === 'GET') return ok(await svc.prompt(campaign, actor, cardId));

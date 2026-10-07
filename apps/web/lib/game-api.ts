@@ -83,6 +83,7 @@ export class GameApi {
   set = (id: string) => this.call<{ card: PublicCard }>('POST', `/cards/${id}/set`);
   roll = (id: string) => this.call<{ card: PublicCard }>('POST', `/cards/${id}/roll`);
   push = (id: string, kind: 'standard' | 'conviction') => this.call<{ card: PublicCard }>('POST', `/cards/${id}/push`, { kind });
+  discard = (id: string) => this.call<{ discarded: true }>('DELETE', `/cards/${id}`);
   concede = (id: string, kind: ConcessionKind) => this.call<{ card: PublicCard }>('POST', `/cards/${id}/concede`, { kind });
   reveal = (id: string) => this.call<{ card: PublicCard }>('POST', `/cards/${id}/reveal`);
   dice = (id: string) => this.call<{ dice: DiceView }>('GET', `/cards/${id}/dice`);

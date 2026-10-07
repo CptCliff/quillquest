@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONCESSION_KINDS, RuleViolation, classifyCard, closeSet, concede, editCard, expandShifts, markWritten, newCard, applyCosts,
+  CONCESSION_KINDS, RuleViolation, checkDiscard, classifyCard, closeSet, concede, editCard, expandShifts, markWritten, newCard, applyCosts,
   outcomePrompt, previewCard, pushCard, pushOptions, reopenForRetcon, revertCosts, resolveSkill, scriptedDice, suggestShifts, toPublicCard, diceView,
   newCharacter, rollCard, type Character, type FlowActor, type PromptCard,
 } from '../src';
@@ -343,4 +343,12 @@ describe('public view: dice stay hidden until revealed', () => {
 
 it('a character with no trait of the right kind still produces an empty suggestion list', () => {
   expect(suggestShifts(newCharacter('x', 'X'), {})).toEqual([]);
+});
+
+describe('discarding a draft', () => {
+  it('the owner may drop an unset draft; nobody else may, and a set card cannot be dropped', () => {
+    expect(() => checkDiscard(filled(), ilse)).not.toThrow();
+    expect(() => checkDiscard(filled(), { id: 'sella', role: 'player' })).toThrow(RuleViolation);
+    expect(() => checkDiscard(closeSet(filled(), ilse, sheet()), ilse)).toThrow(RuleViolation);
+  });
 });

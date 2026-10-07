@@ -18,6 +18,23 @@ export function Battles({ battles, characters, me, game, onNotice }: { battles: 
   return <section aria-label="Battles" data-testid="battles">{list.map((b) => <BattleCard key={b.id} b={b} characters={characters} me={me} game={game} run={run} busy={busy} />)}</section>;
 }
 
+const die = (d: { sides: number; value: number }) => `d${d.sides}: ${d.value}`;
+/** The reveal view of a battle's dice, in words: the only place the numbers appear. */
+function BattleDice({ dice, name, testId }: { dice: BattleDiceView; name: (id: string) => string; testId: string }) {
+  const attempt = (a: BattleDiceView['attempt'], label: string) => (
+    <div>{label}: Skill {die(a.skill)}{a.backing ? ` · Belief ${die(a.backing)}` : ''} → kept {a.kept}; Difficulty {die(a.difficulty)}</div>
+  );
+  return (
+    <div className="dice" data-testid={testId}>
+      {attempt(dice.attempt, 'The attempt')}
+      {dice.second && attempt(dice.second, 'The retry')}
+      {dice.dangers.map((d) => (
+        <div key={d.characterId}>Danger on {name(d.characterId)} ({d.rank}): {die(d)}{d.recheck ? ` · checked again (${d.recheck.rank}): ${die(d.recheck)}` : ''}</div>
+      ))}
+    </div>
+  );
+}
+
 function BattleCard({ b, characters, me, game, run, busy }: { b: PublicBattle; characters: Record<string, Character>; me: Me; game: GameApi; run: Run; busy: boolean }) {
   const name = (id: string) => characters[id]?.name ?? id;
   const gm = me.role === 'gm';
@@ -135,11 +152,11 @@ function BattleCard({ b, characters, me, game, run, busy }: { b: PublicBattle; c
               <button type="button" disabled={busy} onClick={() => run(async () => { setDice((await game.battleDice(b.id)).dice); })}>See the dice</button>
             </>
           )}
-          {dice && <pre data-testid="battle-dice">{JSON.stringify(dice)}</pre>}
+          {dice && <BattleDice dice={dice} name={name} testId="battle-dice" />}
         </div>
       )}
       {b.result && !b.dice && b.status !== 'written' && <button type="button" className="linklike" data-testid="battle-reveal" disabled={busy} onClick={() => run(() => game.revealBattle(b.id))}>Reveal the dice</button>}
-      {b.dice && <pre data-testid="battle-revealed">{JSON.stringify(b.dice)}</pre>}
+      {b.dice && <BattleDice dice={b.dice} name={name} testId="battle-revealed" />}
 
       {b.post && (
         <div data-testid="battle-post"><strong>The stitched post</strong>

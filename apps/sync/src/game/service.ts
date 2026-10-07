@@ -1,5 +1,5 @@
 import {
-  RuleViolation, forcedNext, joinSpotlight, leaveSpotlight, passSpotlight, takeSpotlight, toPublicBattle, publicNpc, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
+  RuleViolation, forcedNext, joinSpotlight, leaveSpotlight, passSpotlight, takeSpotlight, toPublicBattle, publicNpc, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, checkDiscard, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
   markWritten, outcomePrompt, previewCard, pushCard, pushOptions, reopenForRetcon, resolveSkill, revertCosts, rollCard, suggestShifts, toPublicCard,
   newCard, type BurdenOutcome, type CardPatch, type Character, type ConcessionKind, type CostInput, type DiceView, type FlowActor,
   type CanonEntry, type PublicBattle, type ConvictionLogEntry, type CreationState, type PublicNpc, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
@@ -282,6 +282,16 @@ export class GameService {
       s.characters[card.characterId] = r.character;
       this.costNotice(campaign, s, r.card);
       return toPublicCard(r.card);
+    });
+  }
+
+  /** Drops an unset draft the owner opened by mistake. */
+  discard(campaign: string, actor: Identity, cardId: string): Promise<{ discarded: true }> {
+    return this.mutate(campaign, actor, (s) => {
+      checkDiscard(this.card(s, cardId), asFlow(actor));
+      delete s.cards[cardId];
+      s.order = s.order.filter((id) => id !== cardId);
+      return { discarded: true as const };
     });
   }
 

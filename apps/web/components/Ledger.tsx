@@ -117,6 +117,10 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [concession, setConcession] = useState<ConcessionKind>(CONCESSION_KINDS[0]);
   const [manual, setManual] = useState({ source: 'preparation', what: 'skill:1', reason: '' });
+  const [problem, setProblem] = useState<string | null>(null);
+  const ranksChosen = !!card.difficulty && !!card.danger;
+  /** Roll, Set and Discard say why on the card itself when the server refuses; the page banner is out of sight on a long card. */
+  const act = (fn: () => Promise<unknown>) => { setProblem(null); return run(async () => { try { await fn(); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Something went wrong'); throw e; } }); };
   const key = JSON.stringify(card);
   useEffect(() => { api.preview(card.id).then(setPreview, () => setPreview(null)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = (patch: Parameters<GameApi['edit']>[1]) => run(() => api.edit(card.id, patch));
@@ -186,8 +190,9 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
       {preview && preview.problems.length > 0 && <p className="muted" data-testid="problems">{preview.problems.join(' ')}</p>}
 
       <div className="actions">
-        {owner && card.speed === 'quick' && <button disabled={busy} data-testid="roll" onClick={() => run(() => api.roll(card.id))}>Roll</button>}
-        {gm && <button disabled={busy} data-testid="set" onClick={() => run(() => api.set(card.id))}>Set</button>}
+        {owner && card.speed === 'quick' && <button disabled={busy} data-testid="roll" onClick={() => act(() => api.roll(card.id))}>Roll</button>}
+        {gm && <button disabled={busy || !ranksChosen} data-testid="set" title={ranksChosen ? undefined : 'Choose a Difficulty and a Danger first'} onClick={() => act(() => api.set(card.id))}>Set</button>}
+        {owner && <button type="button" disabled={busy} data-testid="discard" onClick={() => act(() => api.discard(card.id))}>Discard this card</button>}
         {owner && (
           <>
             <select aria-label="Concession" data-testid="concede-kind" value={concession} onChange={(e) => setConcession(e.target.value as ConcessionKind)}>{CONCESSION_KINDS.map((k) => <option key={k}>{k}</option>)}</select>
@@ -195,7 +200,9 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
           </>
         )}
       </div>
+      {gm && !ranksChosen && <p className="muted">Choose a Difficulty and a Danger, then Set.</p>}
       {owner && card.speed === 'big' && <p className="muted">A big roll waits for the GM to Set it.</p>}
+      {problem && <p role="alert" className="form-error" data-testid="card-problem">{problem}</p>}
     </div>
   );
 }
@@ -330,7 +337,7 @@ function NewRoll({ env, character }: { env: Env; character: Character }) {
         </select>
       </label>
       {skill === '__other' && <input aria-label="Skill name" placeholder="What are you attempting?" value={other} onChange={(e) => setOther(e.target.value)} />}
-      <button disabled={busy || !name} data-testid="new-roll-open" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>New roll</button>
+      <button disabled={busy || !name} data-testid="new-roll-open" title="Opens a new card in the Ledger; it does not roll anything yet" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>Open a roll card</button>
       {problem && <span role="alert" className="form-error" data-testid="new-roll-problem">{problem}</span>}
     </div>
   );

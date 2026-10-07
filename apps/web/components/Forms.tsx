@@ -15,8 +15,8 @@ export interface FieldSpec {
  * A small form: a few labelled fields and one button. Text fields and checkboxes clear after a successful save, so a form can be used again
  * (a second chapter, another proposal). Test ids are `${testId}-${key}` for fields and `${testId}-go` for the button.
  */
-export function StepForm({ testId, title, fields, submit, label = 'Save', disabled, run, busy, secondary }: {
-  testId: string; title?: string; fields: FieldSpec[]; label?: string; disabled?: boolean; busy?: boolean;
+export function StepForm({ testId, title, hint, fields, submit, label = 'Save', disabled, run, busy, secondary }: {
+  testId: string; title?: string; hint?: string; fields: FieldSpec[]; label?: string; disabled?: boolean; busy?: boolean;
   /** A second button that reads the current values without saving them (for example, asking Claude to check a draft). */
   secondary?: { label: string; testId: string; onClick: (values: Record<string, string | boolean>) => Promise<unknown> };
   submit: (values: Record<string, string | boolean>) => Promise<unknown>;
@@ -34,10 +34,12 @@ export function StepForm({ testId, title, fields, submit, label = 'Save', disabl
       run(async () => {
         try { await submit(values); } catch (err) { setResult({ ok: false, text: err instanceof ApiFailure ? err.message : 'That did not save. Try again.' }); throw err; }
         setResult({ ok: true, text: 'Saved.' });
-        setV((cur) => Object.fromEntries(Object.entries(cur).map(([k, x]) => [k, fields.find((f) => f.key === k)?.kind === 'select' ? x : typeof x === 'boolean' ? false : ''])));
+        // Forms that save a sheet field (Beliefs, Instincts) come back showing what was saved, via `initial`; a form that adds a thing (a chapter, a proposal) clears.
+        setV((cur) => Object.fromEntries(Object.entries(cur).map(([k, x]) => { const f = fields.find((y) => y.key === k); return [k, f?.kind === 'select' ? x : f?.initial !== undefined ? f.initial : typeof x === 'boolean' ? false : '']; })));
       });
     }}>
       {title && <h4>{title}</h4>}
+      {hint && <p className="muted">{hint}</p>}
       {fields.map((f) => (
         f.kind === 'check' ? (
           <label key={f.key} className="check"><input type="checkbox" data-testid={`${testId}-${f.key}`} checked={val(f) === true} onChange={(e) => setV({ ...v, [f.key]: e.target.checked })} /> {f.label}</label>

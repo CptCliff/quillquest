@@ -325,6 +325,7 @@ export function pickChapterGrants(w: W, actor: CreationActor, a: { chapter: numb
   const ch = s0.chapters[a.chapter] ?? no('NO_SUCH_CHAPTER', 'No such chapter');
   if (!a.skill && !a.trait) no('BAD_INPUT', 'Pick a Skill or a Trait');
   if ((a.skill && ch.skill.applied) || (a.trait && ch.trait.applied)) no('GRANT_APPLIED', 'That grant is already settled');
+  if ((a.skill && ch.skill.reopened) || (a.trait && ch.trait.reopened)) no('GRANT_REOPENED', 'The others objected to that pick; they propose it now');
   const offer = ch.offer ?? null;
   const from = (value: string, list: string[], own: boolean | undefined, what: string): string => {
     const v = text(value, what);
@@ -363,12 +364,35 @@ export function objectToPick(w: W, actor: CreationActor, a: { characterId: strin
 }
 
 // ---------- chapter output ----------
+const KINDS = ['connection', 'resource', 'thread'] as const;
+/**
+ * The end check needs a Connection, a Resource and a Thread somewhere across the chapters, and the bad chapter must leave a Thread. An output
+ * that can no longer be changed must not make that impossible, so once every chapter is posted a choice that would strand a kind is refused.
+ */
+function keepOutputsReachable(s: CreationState, chapter: number, kind: ChapterOutput['kind']): void {
+  const max = s.veteran ? 4 : 3;
+  if (s.chapters.length < max) return;
+  const picked = new Set<string>(); let free = 0; let badOpen = false;
+  for (const ch of s.chapters) {
+    const k = ch.index === chapter ? kind : ch.output?.kind;
+    if (k) picked.add(k);
+    else if (ch.endsBadly) badOpen = true;
+    else free += 1;
+  }
+  const missing = KINDS.filter((k) => !picked.has(k) && !(badOpen && k === 'thread'));
+  if (missing.length > free) {
+    const names = missing.map((k) => k[0]!.toUpperCase() + k.slice(1)).join(', ');
+    no('OUTPUT_UNREACHABLE', `That would leave no way to cover everything creation needs (still needed: ${names}). Choose a different kind for this chapter.`);
+  }
+}
+
 export function chooseOutput(w: W, actor: CreationActor, a: { chapter: number; output: ChapterOutput }): W {
   const c = charOf(w, actor); const s = stateOf(w, c.id);
   const ch = s.chapters[a.chapter] ?? no('NO_SUCH_CHAPTER', 'No such chapter');
   if (ch.output) no('OUTPUT_CHOSEN', 'This chapter already has its output');
   const body = text(a.output.text, 'The output');
   if (ch.endsBadly && a.output.kind !== 'thread') no('BAD_CHAPTER_THREAD', 'The bad chapter must leave a Thread');
+  keepOutputsReachable(s, a.chapter, a.output.kind);
   const [w2, id] = nextId(w, 'out-');
   const pick: GrantPick = a.output.kind;
   let sheet: Character = { ...c, chapters: c.chapters.map((x, i) => (i === a.chapter ? { ...x, pick } : x)) };

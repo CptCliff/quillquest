@@ -86,6 +86,8 @@ export class HocuspocusDocPort implements DocPort {
         for (const [key, value] of Object.entries(entries)) {
           if (JSON.stringify(map.get(key)) !== JSON.stringify(value)) map.set(key, value);
         }
+        // An entry the game no longer has (a discarded draft card) leaves the published map too.
+        for (const key of [...map.keys()]) if (!(key in entries)) map.delete(key);
       };
       put(LEDGER, projection.ledger);
       put(CHARACTERS, projection.characters);

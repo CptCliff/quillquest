@@ -12,3 +12,10 @@ Why: the first four-agent playtest never got a player through creation. Every Li
 ## Notes
 - Offers are words only; they ride in the public `creation` map.
 - Not built: GM-extensible library, importing other lifepaths, scoring beyond keywords.
+
+## Round-2 playtest fixes
+- Outputs can no longer strand the end check: once every chapter is posted, `chooseOutput` refuses a kind that leaves no way to cover Connection, Resource and Thread (`OUTPUT_UNREACHABLE`); the output form shows what is still needed.
+- A reopened grant (after an objection) cannot be re-picked by the writer (`GRANT_REOPENED`); the others propose.
+- Forms that save a sheet field come back showing the saved values; "Still to do" re-reads after every action.
+- Roll card: Set needs a Difficulty and a Danger, Roll/Set/Discard errors show on the card, an unset draft can be discarded (`DELETE /cards/:id`, owner or GM); the published `ledger` map now drops cards the game no longer has.
+- Battle dice reveal is words, not JSON. On phones the Notes tab says "create your character" while creating.

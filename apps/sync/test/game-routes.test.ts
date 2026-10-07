@@ -147,3 +147,15 @@ describe('permission matrix', () => {
     expect((await t.call(GM, 'POST', `/cards/${id}/set`)).json.card.status).toBe('set');
   });
 });
+
+describe('discarding a draft card', () => {
+  it('the owner (or the GM, to tidy up) drops an unset draft and it leaves the ledger; another player cannot', async () => {
+    const t = await table();
+    const card = (await t.call(ILSE, 'POST', '/cards', { skillName: 'Climb', anchorParagraphId: 'p1', want: 'Cross the roof', risk: 'I slip' })).json.card;
+    await waitFor(() => t.ledger(t.gm).has(card.id));
+    expect((await t.call(SELLA, 'DELETE', `/cards/${card.id}`)).status).toBe(403);
+    expect((await t.call(ILSE, 'DELETE', `/cards/${card.id}`)).status).toBe(200);
+    await waitFor(() => !t.ledger(t.gm).has(card.id));
+    expect((await t.call(ILSE, 'DELETE', `/cards/${card.id}`)).status).toBe(404);
+  });
+});

@@ -31,6 +31,13 @@ function usedParagraphs(creation: Record<string, CreationState>, crossings: Cros
   return out;
 }
 
+/** Which kinds of output the chapters have not yet covered, as a sentence for the output form. */
+function stillNeeded(st: CreationState): string {
+  const have = new Set(st.chapters.flatMap((c) => (c.output ? [c.output.kind] : [])));
+  const missing = (['connection', 'resource', 'thread'] as const).filter((k) => !have.has(k));
+  return missing.length ? `Still needed: ${missing.join(', ')}.` : 'All three kinds are covered.';
+}
+
 /** What the writer sees of a grant slot on their own chapter. */
 function slotText(slot: ChapterState['skill'] | ChapterState['trait']): string {
   const a = slot.applied as null | { name?: string; text?: string; by: string; toRank?: string };
@@ -43,11 +50,13 @@ export function Creation(p: CreationProps) {
   const { me, characters, creation, crossings, game, editor, onNotice } = p;
   const mine = Object.values(characters).find((c) => c.ownerId === me.id) ?? null;
   const st = mine ? creation[mine.id] : undefined;
-  const { busy, run } = useAct(onNotice);
+  const { busy, run: runAct } = useAct(onNotice);
   const [check, setCheck] = useState<{ passed: boolean; problems: { code: string; message: string }[] } | null>(null);
   const [beliefNotes, setBeliefNotes] = useState<string[]>([]);
   const key = JSON.stringify([st, mine?.beliefs, mine?.threads, mine?.connections, mine?.crossings]);
   useEffect(() => { if (mine && st?.status === 'creating') game.check(mine.id).then(setCheck, () => undefined); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Every action re-reads the checklist when it finishes, so "Still to do" never lags behind a save. */
+  const run: Run = async (fn) => { await runAct(fn); if (mine) game.check(mine.id).then(setCheck, () => undefined); };
 
   if (me.role === 'gm') return <p className="muted">The GM runs session zero from the Director tab. Players write their characters here.</p>;
   if (!mine || !st) return <p className="muted">Your character appears when you open the table.</p>;
@@ -91,7 +100,7 @@ export function Creation(p: CreationProps) {
         {st.chapters.length === 0 && (
           <label className="check"><input type="checkbox" data-testid="veteran" checked={st.veteran} onChange={(e) => run(() => act('veteran', { veteran: e.target.checked }))} /> A veteran: four chapters instead of three</label>
         )}
-        {st.chapters.map((ch) => <ChapterBlock key={ch.index} ch={ch} st={st} others={others} run={run} busy={busy} act={act} game={game} characterId={mine.id} />)}
+        {st.chapters.map((ch) => <ChapterBlock key={ch.index} ch={ch} st={st} others={others} run={run} busy={busy} act={act} game={game} characterId={mine.id} stillNeeded={stillNeeded(st)} />)}
         {st.origin.paragraphId && st.chapters.length < maxChapters && (
           <StepForm testId="chapter" title="Post the next chapter" label="Post chapter" run={run} busy={busy}
             fields={[
@@ -158,8 +167,8 @@ export function Creation(p: CreationProps) {
   );
 }
 
-function ChapterBlock({ ch, st, others, run, busy, act, game, characterId }: {
-  characterId: string; ch: ChapterState; st: CreationState; others: Character[]; run: Run; busy: boolean; game: GameApi;
+function ChapterBlock({ ch, st, others, run, busy, act, game, characterId, stillNeeded: needed }: {
+  characterId: string; stillNeeded: string; ch: ChapterState; st: CreationState; others: Character[]; run: Run; busy: boolean; game: GameApi;
   act: (n: string, b?: Record<string, unknown>) => Promise<unknown>;
 }) {
   return (
@@ -169,7 +178,7 @@ function ChapterBlock({ ch, st, others, run, busy, act, game, characterId }: {
       <div>Trait: <span data-testid="chapter-trait">{slotText(ch.trait)}</span>{ch.trait.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-trait" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'trait' }))}> swap</button>}</div>
       {(!ch.skill.applied || !ch.trait.applied) && <ChapterOffer ch={ch} st={st} run={run} busy={busy} act={act} game={game} characterId={characterId} />}
       {ch.output ? <div>Output: {ch.output.kind} — {ch.output.text}</div> : (
-        <StepForm testId={`output-${ch.index}`} title="What does this chapter leave you?" label="Save output" run={run} busy={busy}
+        <StepForm testId={`output-${ch.index}`} title="What does this chapter leave you?" hint={`Across your chapters you need one Connection, one Resource and one Thread, and the chapter that ended badly must leave a Thread. ${needed} A chosen output cannot be changed.`} label="Save output" run={run} busy={busy}
           fields={[
             { key: 'kind', label: `Chapter ${ch.index + 1} leaves you`, kind: 'select', options: ch.endsBadly ? [{ value: 'thread', label: 'A Thread (the bad chapter must)' }] : [{ value: 'connection', label: 'A Connection' }, { value: 'resource', label: 'A Resource' }, { value: 'thread', label: 'A Thread' }] },
             { key: 'text', label: 'What this chapter leaves you, in a line' },

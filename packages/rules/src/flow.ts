@@ -301,6 +301,12 @@ export function pushCard(card: PromptCard, actor: FlowActor, kind: Exclude<PushK
   return { card: { ...card, roll: enginePush(card.roll, 'standard', dice) }, character: sheet };
 }
 
+/** An unset draft the player opened by mistake can simply be dropped: nothing has been decided and no dice exist. Returns nothing; the caller removes the card. */
+export function checkDiscard(card: PromptCard, actor: FlowActor): void {
+  if (!ownsCard(card, actor)) throw deny('NOT_ALLOWED', 'That is not your card');
+  if (card.status !== 'draft') throw deny('CANNOT_DISCARD', 'Only a draft that has not been set can be discarded');
+}
+
 /** A player may concede at Set, or instead of pushing after a failed goal. A Danger that already hit still happens. */
 export function concede(card: PromptCard, actor: FlowActor, kind: ConcessionKind): PromptCard {
   if (!ownsCard(card, actor)) throw deny('NOT_ALLOWED', 'That is not your card');

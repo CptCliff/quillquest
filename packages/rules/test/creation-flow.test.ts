@@ -257,9 +257,10 @@ describe('chapter output (7.2): a Connection, a Resource or a Thread', () => {
   it('a Resource raises Wealth or Network a rung, up to the top', () => {
     let w = chooseOutput(posted(), ilse, { chapter: 0, output: { kind: 'resource', raise: 'network', text: 'A guild friend' } });
     expect(sheet(w, 'ilse')).toMatchObject({ networkRung: 2, wealthRung: 1 });
-    w = { ...w, characters: { ...w.characters, 'ilse-pc': { ...sheet(w, 'ilse'), wealthRung: 4 } } };
-    w = chooseOutput(w, ilse, { chapter: 2, output: { kind: 'resource', raise: 'wealth', text: 'x' } });
-    expect(sheet(w, 'ilse').wealthRung).toBe(4);
+    let top = posted();
+    top = { ...top, characters: { ...top.characters, 'ilse-pc': { ...sheet(top, 'ilse'), wealthRung: 4 } } };
+    top = chooseOutput(top, ilse, { chapter: 2, output: { kind: 'resource', raise: 'wealth', text: 'x' } });
+    expect(sheet(top, 'ilse').wealthRung).toBe(4);
   });
   it('a Thread is unfinished business, remembered as coming from that chapter', () => {
     const w = chooseOutput(posted(), ilse, { chapter: 1, output: { kind: 'thread', text: 'The captain wants me silenced' } });
@@ -608,5 +609,34 @@ describe('chapter offers and self-picked grants', () => {
   it('a pick cannot overwrite a grant that is already settled', () => {
     const w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' });
     fails(() => pickChapterGrants(w, ilse, { chapter: 0, skill: 'Hold the Line', trait: 'Stoic' }), 'GRANT_APPLIED');
+  });
+});
+
+describe('outputs can always still cover Connection, Resource and Thread', () => {
+  const posted = () => withChapters(table(), 'ilse', ['c1', 'c2', 'c3']); // chapter 2 (index 1) is the bad one, so it must leave a Thread
+  const out = (w: CreationWorld, chapter: number, kind: 'connection' | 'resource' | 'thread') =>
+    chooseOutput(w, ilse, { chapter, output: kind === 'resource' ? { kind, text: 'x', raise: 'wealth' } : { kind, text: 'x' } });
+  it('refuses a Thread on a chapter that is not the bad one when that leaves no way to cover all three kinds', () => {
+    fails(() => out(posted(), 0, 'thread'), 'OUTPUT_UNREACHABLE');
+  });
+  it('allows the choices that keep all three reachable, in any order', () => {
+    let w = out(posted(), 2, 'resource');
+    w = out(w, 0, 'connection');
+    w = out(w, 1, 'thread');
+    expect(w.characters['ilse-pc']!.chapters.map((c) => c.pick)).toEqual(['connection', 'thread', 'resource']);
+  });
+  it('refuses a repeat that would leave a kind uncoverable, and the message names what is still needed', () => {
+    const w = out(posted(), 0, 'connection');
+    try { out(w, 2, 'connection'); throw new Error('expected a refusal'); } catch (e) { expect((e as RuleViolation).code).toBe('OUTPUT_UNREACHABLE'); expect((e as RuleViolation).message).toMatch(/Resource/); }
+  });
+});
+
+describe('a reopened grant goes back to the others', () => {
+  it('the writer cannot re-pick over an objection; the others propose instead', () => {
+    const base = pickOrigin(withChapters(table(), 'ilse', ['c1', 'c2', 'c3']), ilse, { skill: 'Sneak', connection: 'Wren' });
+    let w = offerChapter(base, ilse, { chapter: 0, prose: 'I stood the north gate for six winters, checking carts and toll papers at the border.' });
+    w = pickChapterGrants(w, ilse, { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' });
+    w = objectToPick(w, sella, { characterId: 'ilse-pc', chapter: 0, part: 'skill' });
+    fails(() => pickChapterGrants(w, ilse, { chapter: 0, skill: 'Hold the Line', skillOwn: true }), 'GRANT_REOPENED');
   });
 });
