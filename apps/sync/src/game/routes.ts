@@ -157,6 +157,25 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
 
     if (rest[0] === 'me' && method === 'GET') return ok(await svc.me(campaign, actor));
 
+    // Session zero. `POST /creation/:step` runs one step; the rules say whether it is allowed.
+    if (rest[0] === 'creation') {
+      if (rest[1] === 'check' && rest[2] && method === 'GET') return ok(await svc.creationCheck(campaign, actor, rest[2]));
+      if (rest[1] && rest.length === 2 && method === 'POST') return ok(await svc.creationAct(campaign, actor, rest[1], await readJson(req)));
+    }
+    if (rest[0] === 'draft') {
+      if (rest.length === 1 && method === 'GET') return ok(await svc.draftGet(campaign, actor));
+      if (rest.length === 1 && method === 'PUT') {
+        const b = await readJson(req);
+        const chapters = Array.isArray(b.chapters) ? b.chapters : [];
+        const origin = b.origin && typeof b.origin === 'object' ? { paragraphId: str((b.origin as Record<string, unknown>).paragraphId, 'origin.paragraphId') } : null;
+        return ok(await svc.draftSave(campaign, actor, {
+          veteran: b.veteran === true, origin,
+          chapters: chapters.map((c: Record<string, unknown>) => ({ paragraphId: str(c.paragraphId, 'paragraphId'), summary: typeof c.summary === 'string' ? c.summary : '', endsBadly: c.endsBadly === true, testedBelief: c.testedBelief === true })),
+        }));
+      }
+      if (rest[1] === 'import' && method === 'POST') return ok(await svc.draftImport(campaign, actor));
+    }
+
     if (rest[0] === 'cards') {
       if (rest.length === 1 && method === 'POST') {
         const b = await readJson(req);

@@ -1,12 +1,15 @@
 import type { Hocuspocus } from '@hocuspocus/server';
 import * as Y from 'yjs';
 import { fromYFragment, type StoryDoc } from '@quillquest/story';
-import type { Character } from '@quillquest/rules';
-import type { DocPort, LedgerEntry } from './service';
+import type { DocPort, Projection } from './service';
+import { draftName } from './docnames';
 
 const FRAGMENT = 'default';
 export const LEDGER = 'ledger';
 export const CHARACTERS = 'characters';
+export const CREATION = 'creation';
+export const CANON = 'canon';
+export const CAMPAIGN = 'campaign';
 
 /** Reads and writes the live campaign document from the server. These writes bypass the client edit policy on purpose. */
 export class HocuspocusDocPort implements DocPort {
@@ -35,7 +38,27 @@ export class HocuspocusDocPort implements DocPort {
     });
   }
 
-  publish(campaign: string, projection: { ledger: Record<string, LedgerEntry>; characters: Record<string, Character> }): Promise<void> {
+  draft(campaign: string, userId: string): Promise<StoryDoc> {
+    return this.withDoc(draftName(campaign, userId), (doc) => fromYFragment(doc.getXmlFragment(FRAGMENT)));
+  }
+
+  /** Copies every paragraph of a player's private draft to the end of the shared story, as theirs, under the new ids in `map`. */
+  async copyDraft(campaign: string, userId: string, map: Record<string, string>): Promise<void> {
+    // A clone cannot be read until it is in a document, so the old id is taken from the original.
+    const copies = await this.withDoc(draftName(campaign, userId), (doc) =>
+      doc.getXmlFragment(FRAGMENT).toArray().flatMap((n) => (n instanceof Y.XmlElement ? [{ from: String(n.getAttribute('paragraphId')), el: n.clone() }] : [])));
+    await this.withDoc(campaign, (doc) => {
+      for (const { from, el } of copies) {
+        el.setAttribute('paragraphId', map[from] ?? `p${Math.random().toString(36).slice(2, 10)}`);
+        el.setAttribute('authorId', userId);
+        el.setAttribute('pov', 'own');
+        el.removeAttribute('locked');
+      }
+      doc.getXmlFragment(FRAGMENT).push(copies.map((c) => c.el));
+    });
+  }
+
+  publish(campaign: string, projection: Projection): Promise<void> {
     return this.withDoc(campaign, (doc) => {
       const put = (name: string, entries: Record<string, unknown>) => {
         const map = doc.getMap(name);
@@ -45,6 +68,9 @@ export class HocuspocusDocPort implements DocPort {
       };
       put(LEDGER, projection.ledger);
       put(CHARACTERS, projection.characters);
+      put(CREATION, projection.creation);
+      put(CANON, projection.canon);
+      put(CAMPAIGN, projection.campaign);
     });
   }
 }

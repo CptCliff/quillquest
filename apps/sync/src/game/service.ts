@@ -1,22 +1,36 @@
 import {
-  RuleViolation, applyCosts, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
+  RuleViolation, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
   markWritten, outcomePrompt, previewCard, pushCard, pushOptions, reopenForRetcon, resolveSkill, revertCosts, rollCard, suggestShifts, toPublicCard,
   newCard, type BurdenOutcome, type CardPatch, type Character, type ConcessionKind, type CostInput, type DiceView, type FlowActor,
-  type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
+  type CanonEntry, type CreationState, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
 } from '@quillquest/rules';
 import { lockThrough, type StoryDoc } from '@quillquest/story';
 import type { Identity } from '../auth';
 import type { DiceProvider } from './dice';
 import { GameError } from './errors';
-import { seedDevCharacter, starterCharacter } from './dev-characters';
+import { ACTIONS, PARAGRAPH_ACTIONS } from './creation';
+import { draftName } from './docnames';
+import { seedDevCharacter } from './dev-characters';
 import type { GameState, GameStore } from './store';
 
 /** The campaign document, as the game sees it. The Hocuspocus version writes to the live Yjs doc; tests use a fake. */
 export interface DocPort {
   story(campaign: string): Promise<StoryDoc>;
   setLocked(campaign: string, paragraphIds: string[], locked: boolean): Promise<void>;
-  /** Writes the public projection: ledger entries (no dice) and the open-table character sheets. */
-  publish(campaign: string, projection: { ledger: Record<string, LedgerEntry>; characters: Record<string, Character> }): Promise<void>;
+  /** Writes the public projection: ledger entries (no dice), the open-table character sheets, and session-zero progress. */
+  publish(campaign: string, projection: Projection): Promise<void>;
+  /** A player's private solo draft, read for import. */
+  draft(campaign: string, userId: string): Promise<StoryDoc>;
+  /** Copies the whole draft to the end of the shared story as the player's own paragraphs, under the new ids in `map`. */
+  copyDraft(campaign: string, userId: string, map: Record<string, string>): Promise<void>;
+}
+
+export interface Projection {
+  ledger: Record<string, LedgerEntry>;
+  characters: Record<string, Character>;
+  creation: Record<string, CreationState>;
+  canon: Record<string, CanonEntry>;
+  campaign: { phase: GameState['phase']; crossings: GameState['proposals']; overrides: GameState['checkOverrides'] };
 }
 
 export type LedgerEntry = PublicCard & { seq: number };
@@ -34,6 +48,11 @@ export interface CreateCardInput {
 export type ClientPatch = Omit<CardPatch, 'skill'> & { skillName?: string };
 
 export interface WrittenInput extends CostInput { outcomeParagraphId: string }
+
+const world = (s: GameState): CreationWorld => ({ phase: s.phase, characters: s.characters, creation: s.creation, canon: s.canon, proposals: s.proposals, overrides: s.checkOverrides, seq: s.wseq });
+const adopt = (s: GameState, w: CreationWorld) => {
+  s.phase = w.phase; s.characters = w.characters; s.creation = w.creation; s.canon = w.canon; s.proposals = w.proposals; s.checkOverrides = w.overrides; s.wseq = w.seq;
+};
 
 const asFlow = (i: Identity): FlowActor => ({ id: i.id, role: i.role });
 
@@ -67,18 +86,22 @@ export class GameService {
     return next;
   }
 
-  /** Every player has a character from their first visit: a preset dev sheet, or the next starter template. */
+  /** Every player has a character from their first visit: a blank one in creation, or (preset dev users only) a ready-made sheet. */
   private ensureCharacter(s: GameState, actor: Identity) {
     if (actor.role === 'gm' || s.characterOf[actor.id]) return;
-    const made = seedDevCharacter(actor.id) ?? starterCharacter(actor.id, actor.name, Object.keys(s.characters).length);
-    s.characters[made.id] = made;
-    s.characterOf[actor.id] = made.id;
+    const preset = seedDevCharacter(actor.id);
+    const w = preset ? addReadyCharacter(world(s), preset) : addCreatingCharacter(world(s), { userId: actor.id, name: actor.name });
+    adopt(s, w);
+    s.characterOf[actor.id] = `${actor.id}-pc`;
   }
 
   private card(s: GameState, id: string): PromptCard {
     const c = s.cards[id];
     if (!c) throw new GameError(404, 'NO_CARD', 'No such card');
     return c;
+  }
+  private mustBeReady(s: GameState, characterId: string) {
+    if (!canRoll(world(s), characterId)) throw new GameError(409, 'NOT_READY', 'Finish creating your character first (or ask the GM to override the check)');
   }
   private sheet(s: GameState, characterId: string): Character {
     const c = s.characters[characterId];
@@ -90,7 +113,11 @@ export class GameService {
     const s = state ?? (await this.d.store.load(campaign));
     const ledger: Record<string, LedgerEntry> = {};
     s.order.forEach((id, i) => { ledger[id] = { ...toPublicCard(s.cards[id]!), seq: i }; });
-    await this.d.docs.publish(campaign, { ledger, characters: s.characters });
+    await this.d.docs.publish(campaign, {
+      ledger, characters: s.characters, creation: s.creation,
+      canon: Object.fromEntries(s.canon.map((e) => [e.id, e])),
+      campaign: { phase: s.phase, crossings: s.proposals, overrides: s.checkOverrides },
+    });
   }
 
   // ---- cards ------------------------------------------------------------------------------------------------------
@@ -162,9 +189,10 @@ export class GameService {
     return this.mutate(campaign, actor, (s) => {
       let card = this.card(s, cardId);
       const sheet = this.sheet(s, card.characterId);
+      // Ownership first: someone else's card is not theirs to roll, and they shouldn't learn its state either way.
+      if (actor.role !== 'gm' && actor.id !== card.actorId) throw new GameError(403, 'NOT_ALLOWED', 'That is not your card');
+      this.mustBeReady(s, card.characterId);
       if (card.status === 'draft') {
-        // Ownership first: someone else's card is not theirs to roll, and they shouldn't learn its state either way.
-        if (actor.role !== 'gm' && actor.id !== card.actorId) throw new GameError(403, 'NOT_ALLOWED', 'That is not your card');
         if (classifyCard(card) === 'big' || actor.id !== card.actorId)
           throw new GameError(409, 'NOT_SET', 'The card must be Set before it is rolled');
         card = flowCloseSet(card, asFlow(actor), sheet);
@@ -179,6 +207,7 @@ export class GameService {
     return this.mutate(campaign, actor, (s) => {
       const card = this.card(s, cardId);
       const sheet = this.sheet(s, card.characterId);
+      this.mustBeReady(s, card.characterId);
       if (!['standard', 'conviction'].includes(kind)) throw new GameError(400, 'BAD_PUSH', 'Push is standard or conviction');
       const r = pushCard(card, asFlow(actor), kind, this.d.dice.forCampaign(campaign), sheet);
       s.cards[cardId] = r.card;
@@ -304,6 +333,63 @@ export class GameService {
       const r = layDownBurden(sheet, burdenId, outcome);
       s.characters[characterId] = r.character;
       return r.character;
+    });
+  }
+  // ---- session zero ------------------------------------------------------------------------------------------------
+
+  /** One creation step by the acting player (or the GM). The rules decide; this only supplies the story and the clock. */
+  creationAct(campaign: string, actor: Identity, action: string, body: Record<string, unknown>): Promise<{ done: true }> {
+    const handler = ACTIONS[action];
+    if (!handler) throw new GameError(404, 'NOT_FOUND', 'No such creation step');
+    return this.mutate(campaign, actor, async (s) => {
+      const story = PARAGRAPH_ACTIONS.has(action) ? await this.d.docs.story(campaign) : [];
+      const next = handler(world(s), asFlow(actor), body, { story, now: (this.d.now?.() ?? new Date()).toISOString() }, actor);
+      adopt(s, next);
+      return { done: true as const };
+    });
+  }
+
+  /** The end-of-creation check for any character at the table: what is still missing, in words. */
+  creationCheck(campaign: string, actor: Identity, characterId: string): Promise<{ passed: boolean; problems: { code: string; message: string }[] }> {
+    return this.read(campaign, actor, (s) => {
+      if (!s.creation[characterId]) throw new GameError(404, 'NO_CHARACTER', 'No such character');
+      return endCheck(world(s), characterId);
+    });
+  }
+
+  private draftOf(s: GameState, actor: Identity): Draft {
+    if (actor.role === 'gm') throw new GameError(403, 'GM_HAS_NO_CHARACTER', 'Drafts are for players');
+    return s.drafts[actor.id] ?? { veteran: false, origin: null, chapters: [] };
+  }
+
+  draftGet(campaign: string, actor: Identity): Promise<{ draft: Draft; problems: string[] }> {
+    return this.read(campaign, actor, (s) => { const d = this.draftOf(s, actor); return { draft: d, problems: draftProblems(d) }; });
+  }
+
+  /** Saves the tracker for a solo draft: which paragraphs of the private draft are the Origin and the chapters. */
+  draftSave(campaign: string, actor: Identity, input: Draft): Promise<{ draft: Draft; problems: string[] }> {
+    return this.mutate(campaign, actor, async (s) => {
+      this.draftOf(s, actor);
+      const prose = await this.d.docs.draft(campaign, actor.id);
+      const has = (id: string) => prose.some((p) => p.paragraphId === id);
+      const ids = [...(input.origin ? [input.origin.paragraphId] : []), ...input.chapters.map((c) => c.paragraphId)];
+      if (ids.some((id) => !has(id))) throw new GameError(400, 'NO_SUCH_PARAGRAPH', 'A marked paragraph is not in your draft');
+      if (new Set(ids).size !== ids.length) throw new GameError(400, 'BAD_INPUT', 'Each paragraph can mark only one step');
+      if (input.chapters.length > 4) throw new GameError(400, 'BAD_INPUT', 'At most four chapters');
+      s.drafts[actor.id] = input;
+      return { draft: input, problems: draftProblems(input) };
+    });
+  }
+
+  /** Brings the draft to the table: its prose is copied into the shared story as the player's own, and its chapters are posted. */
+  draftImport(campaign: string, actor: Identity): Promise<{ done: true }> {
+    return this.mutate(campaign, actor, async (s) => {
+      const d = this.draftOf(s, actor);
+      const prose = await this.d.docs.draft(campaign, actor.id);
+      const map = Object.fromEntries(prose.map((p) => [p.paragraphId, `p${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`]));
+      adopt(s, importDraft(world(s), asFlow(actor), d, map)); // validates everything before the story is touched
+      await this.d.docs.copyDraft(campaign, actor.id, map);
+      return { done: true as const };
     });
   }
 }

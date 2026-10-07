@@ -16,7 +16,7 @@ export function extractSyncUpdate(raw: Uint8Array): Uint8Array | null {
 export const FRAGMENT = 'default';
 
 /** Root types the server writes. Clients may read them but never change them. */
-const SERVER_OWNED_MAPS = ['ledger', 'characters'];
+const SERVER_OWNED_MAPS = ['ledger', 'characters', 'creation', 'canon', 'campaign'];
 
 /**
  * A fingerprint of everything in the document except the story. Root types that arrive in an update are generic until
@@ -43,7 +43,7 @@ export function checkUpdate(doc: Y.Doc, update: Uint8Array, actor: Actor): Valid
     const after = fromYFragment(scratch.getXmlFragment(FRAGMENT));
     const result = validateChange(before, after, actor);
     if (serverOwned(scratch) !== ownedBefore)
-      result.violations.push({ code: 'SERVER_OWNED', message: 'The ledger and characters are written by the game, not by clients' });
+      result.violations.push({ code: 'SERVER_OWNED', message: 'The ledger, characters and creation records are written by the game, not by clients' });
     return result;
   } catch (e) {
     return { violations: [{ code: 'SCHEMA', message: e instanceof Error ? e.message : 'unreadable document' }] };

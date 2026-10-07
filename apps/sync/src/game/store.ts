@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Character, PromptCard } from '@quillquest/rules';
+import type { CanonEntry, CheckOverride, Character, CreationState, CrossingProposal, Draft, PromptCard } from '@quillquest/rules';
 
 export interface OverrideEntry { at: string; gmId: string; action: 'retcon'; cardId: string }
 
@@ -14,9 +14,37 @@ export interface GameState {
   /** user id -> character id */
   characterOf: Record<string, string>;
   overrides: OverrideEntry[];
+  /** Session zero: the campaign's phase, each character's creation progress, the Canon, crossing proposals, and logged check overrides. */
+  phase: 'sessionZero' | 'playing';
+  creation: Record<string, CreationState>;
+  canon: CanonEntry[];
+  proposals: CrossingProposal[];
+  checkOverrides: CheckOverride[];
+  /** Counter for ids made by the creation rules. */
+  wseq: number;
+  /** Solo-draft trackers by user id. The draft prose itself is a private document; this is only its bookkeeping. */
+  drafts: Record<string, Draft>;
 }
 
-export const emptyState = (): GameState => ({ seq: 0, cards: {}, order: [], characters: {}, characterOf: {}, overrides: [] });
+export const emptyState = (): GameState => ({
+  seq: 0, cards: {}, order: [], characters: {}, characterOf: {}, overrides: [],
+  phase: 'sessionZero', creation: {}, canon: [], proposals: [], checkOverrides: [], wseq: 0, drafts: {},
+});
+
+/**
+ * Fills in what older records lack. A campaign saved before M5 is already being played: its characters are ready and its
+ * phase is `playing`, so nothing changes for a table that began before session zero existed.
+ */
+export function normalizeState(raw: Partial<GameState>): GameState {
+  const base = { ...emptyState(), ...raw } as GameState;
+  if (!raw.phase) {
+    base.phase = 'playing';
+    for (const id of Object.keys(base.characters)) {
+      base.creation[id] ??= { status: 'ready', veteran: false, origin: { paragraphId: null, skill: null, connection: null }, chapters: [], swapUsed: false, hookThreadId: null, burdenChosen: false, standingPrompts: [] };
+    }
+  }
+  return base;
+}
 
 export interface GameStore {
   load(campaign: string): Promise<GameState>;
@@ -38,7 +66,7 @@ export class FileGameStore implements GameStore {
   constructor(private dir: string) {}
   async load(campaign: string): Promise<GameState> {
     try {
-      return JSON.parse(await readFile(join(this.dir, `${safe(campaign)}.game.json`), 'utf8')) as GameState;
+      return normalizeState(JSON.parse(await readFile(join(this.dir, `${safe(campaign)}.game.json`), 'utf8')) as Partial<GameState>);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return emptyState();
       throw e;

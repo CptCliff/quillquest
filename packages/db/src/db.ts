@@ -177,6 +177,15 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
         await sql.query(`insert into documents (campaign_id, state) values ($1, $2) on conflict (campaign_id) do update set state = excluded.state, updated_at = now()`, [campaignId, state]);
       } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
     },
+    async loadDraft(campaignId: string, userId: string): Promise<Uint8Array | null> {
+      const r = (await sql.query<{ state: Uint8Array }>('select state from draft_documents where campaign_id = $1 and user_id = $2', [campaignId, userId])).rows[0];
+      return r ? new Uint8Array(r.state) : null;
+    },
+    async saveDraft(campaignId: string, userId: string, state: Uint8Array): Promise<void> {
+      try {
+        await sql.query(`insert into draft_documents (campaign_id, user_id, state) values ($1, $2, $3) on conflict (campaign_id, user_id) do update set state = excluded.state, updated_at = now()`, [campaignId, userId, state]);
+      } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
+    },
   };
 }
 export type Db = ReturnType<typeof createDb>;

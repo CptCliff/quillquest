@@ -4,7 +4,7 @@ import type { Cell, StoryDoc } from '@quillquest/story';
 import type { Identity } from '../src/auth';
 import { QueuedDice } from '../src/game/dice';
 import { GameError } from '../src/game/errors';
-import { GameService, type DocPort, type LedgerEntry } from '../src/game/service';
+import { GameService, type DocPort, type LedgerEntry, type Projection } from '../src/game/service';
 import { MemoryGameStore } from '../src/game/store';
 
 const ILSE: Identity = { id: 'ilse', name: 'Ilse', role: 'player', color: '#c2410c' };
@@ -17,22 +17,31 @@ const para = (id: string, authorId: string, text = 'x', locked = false) => ({ pa
 
 class FakeDocs implements DocPort {
   doc: StoryDoc = [para('p1', 'ilse', 'I reach the wall.'), para('p2', 'ilse', 'I climb.')];
-  published: { ledger: Record<string, LedgerEntry>; characters: Record<string, Character> } | null = null;
+  published: Projection | null = null;
+  drafts: Record<string, StoryDoc> = {};
+  copied: { userId: string; map: Record<string, string> }[] = [];
   lockCalls: { ids: string[]; locked: boolean }[] = [];
   async story() { return structuredClone(this.doc); }
   async setLocked(_c: string, ids: string[], locked: boolean) {
     this.lockCalls.push({ ids, locked });
     this.doc = this.doc.map((p) => (ids.includes(p.paragraphId) ? { ...p, locked } : p));
   }
-  async publish(_c: string, projection: FakeDocs['published']) { this.published = structuredClone(projection); }
+  async publish(_c: string, projection: Projection) { this.published = structuredClone(projection); }
+  async draft(_c: string, userId: string) { return structuredClone(this.drafts[userId] ?? []); }
+  async copyDraft(_c: string, userId: string, map: Record<string, string>) {
+    this.copied.push({ userId, map });
+    const mine = this.drafts[userId] ?? [];
+    this.doc = [...this.doc, ...mine.map((p) => ({ ...p, paragraphId: map[p.paragraphId]!, authorId: userId, locked: false }))];
+  }
 }
 
 function setup() {
   const docs = new FakeDocs();
   const dice = new QueuedDice();
   const now = () => new Date('2026-10-07T12:00:00Z');
-  const svc = new GameService({ store: new MemoryGameStore(), dice, docs, now });
-  return { svc, docs, dice };
+  const store = new MemoryGameStore();
+  const svc = new GameService({ store, dice, docs, now });
+  return { svc, docs, dice, store };
 }
 
 /** Open a quick card for Ilse with ranks filled in. dangerKind 'other' unless told otherwise. */
@@ -242,15 +251,32 @@ describe('retcon', () => {
 });
 
 describe('who may do what', () => {
-  it('the GM has no character and opens no cards; any other player gets a starter character, named for them, owned by them', async () => {
+  it('the GM has no character and opens no cards; any other player gets a blank character in creation, named for them, owned by them', async () => {
     const t = setup();
     expect((await reject(t.svc.createCard(C, GM, { skillName: 'Climb' })) as GameError).status).toBe(403);
     const newcomer = { id: 'uuid-1234', name: 'Wren', role: 'player' as const, color: '#0e7490' };
     const me = (await t.svc.me(C, newcomer)).character!;
     expect(me).toMatchObject({ id: 'uuid-1234-pc', name: 'Wren', ownerId: 'uuid-1234' });
-    expect(me.skills.length).toBeGreaterThan(0); // the first starter uses the first template
-    const second = (await t.svc.me(C, { ...newcomer, id: 'uuid-5678', name: 'Pike' })).character!;
-    expect(second.skills.map((s) => s.name)).not.toEqual(me.skills.map((s) => s.name)); // the next template
+    expect(me.skills).toEqual([]);
+    expect(t.docs.published!.creation['uuid-1234-pc']).toMatchObject({ status: 'creating' });
+    expect(t.docs.published!.campaign.phase).toBe('sessionZero');
+  });
+  it('a character still in creation cannot roll or push until the check passes or the GM overrides it', async () => {
+    const t = setup();
+    const newcomer = { id: 'uuid-1234', name: 'Wren', role: 'player' as const, color: '#0e7490' };
+    await t.svc.me(C, newcomer);
+    const state = await t.store.load(C);
+    state.characters['uuid-1234-pc']!.skills.push({ name: 'Climb', rank: 'Capable' }); // a granted Skill, so there is something to roll
+    await t.store.save(C, state);
+    t.docs.doc = [para('w1', 'uuid-1234', 'I climb.')];
+    const card = await t.svc.createCard(C, newcomer, { skillName: 'Climb', anchorParagraphId: 'w1', want: 'Climb', risk: 'Fall' });
+    await t.svc.editCard(C, newcomer, card.id, { difficulty: 'Demanding', danger: 'Serious', dangerKind: 'other', dangerText: 'Fall' });
+    const refused = (await reject(t.svc.roll(C, newcomer, card.id))) as GameError;
+    expect([refused.status, refused.code]).toEqual([409, 'NOT_READY']);
+    expect(((await reject(t.svc.roll(C, GM, card.id))) as GameError).code).toBe('NOT_READY'); // the GM override is the way through
+    await t.svc.creationAct(C, GM, 'override', { characterId: 'uuid-1234-pc', reason: 'Joined mid-game; we will fill the sheet in as we play' });
+    t.dice.queue(C, [5, 3, 6]);
+    expect((await t.svc.roll(C, newcomer, card.id)).status).toBe('rolled');
   });
   it('a player who leaves keeps their character, marked left; rejoining clears it', async () => {
     const t = setup();
@@ -266,9 +292,9 @@ describe('who may do what', () => {
     await t.svc.closeSet(C, ILSE, card.id);
     for (const attempt of [
       () => t.svc.editCard(C, SELLA, card.id, { want: 'x' }),
-      () => t.svc.roll(C, SELLA, card.id),
       () => t.svc.concede(C, SELLA, card.id, 'surrender'),
     ]) expect(await reject(attempt())).toBeInstanceOf(RuleViolation);
+    expect((await reject(t.svc.roll(C, SELLA, card.id)) as GameError).status).toBe(403);
     t.dice.queue(C, [8, 1, 1]);
     await t.svc.roll(C, ILSE, card.id);
     expect((await reject(t.svc.written(C, SELLA, card.id, { outcomeParagraphId: 'p2' })) as GameError).status).toBe(403);

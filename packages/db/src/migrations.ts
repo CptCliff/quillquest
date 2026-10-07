@@ -68,4 +68,18 @@ export const MIGRATIONS: Migration[] = [
       alter table documents enable row level security;
     `,
   },
+  {
+    // A player's solo character draft (design plan 7.1): a private Yjs document, one per player per campaign.
+    name: '0002_draft_documents',
+    sql: `
+      create table draft_documents (
+        campaign_id text not null references campaigns (id) on delete cascade,
+        user_id text not null references profiles (user_id),
+        state bytea not null,
+        updated_at timestamptz not null default now(),
+        primary key (campaign_id, user_id)
+      );
+      alter table draft_documents enable row level security;
+    `,
+  },
 ];

@@ -13,6 +13,7 @@ import { FileStore, type DocumentStore } from './store';
 import { QueuedDice, type DiceProvider } from './game/dice';
 import { HocuspocusDocPort } from './game/docport';
 import { handleGameRequest } from './game/routes';
+import { campaignOf, draftOwner } from './game/docnames';
 import { GameService } from './game/service';
 import { FileGameStore, MemoryGameStore, type GameStore } from './game/store';
 
@@ -62,8 +63,11 @@ export function createSyncServer(opts: SyncServerOptions) {
       // about itself is trusted, and a stranger to the campaign never gets the document.
       const claims = await verifyToken(providers, token);
       if (db) await db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color);
-      const identity = await directory.resolve(claims, documentName);
+      const identity = await directory.resolve(claims, campaignOf(documentName));
       if (!identity) throw new Error('not a member of this campaign');
+      // A solo draft is private: only its author may open it. The GM and the other players are strangers to it.
+      const owner = draftOwner(documentName);
+      if (owner && owner !== identity.id) throw new Error('not your draft');
       // A member who left may still read the story. Hocuspocus drops every write on a read-only connection (its normal sync
       // handshake still works), so there is nothing for us to reject, and rejecting would only make their browser reconnect forever.
       if (identity.left) connectionConfig.readOnly = true;

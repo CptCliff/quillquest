@@ -196,7 +196,7 @@ describe('row-level security: deny by default', () => {
     `);
     await h.pg.exec('set role authenticated');
     try {
-      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents']) {
+      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents']) {
         const { rows } = await h.pg.query(`select * from ${t}`);
         expect(rows, t).toEqual([]);
       }
@@ -219,6 +219,20 @@ describe('snapshots', () => {
     await h.db.saveDocument(c.id, bytes);
     expect(await h.db.loadDocument(c.id)).toEqual(bytes);
     expect(await h.db.loadDocument('nope-nope')).toBeNull();
+  });
+});
+
+describe('solo drafts', () => {
+  it('keeps one private document per player per campaign, replacing on save', async () => {
+    const c = await h.db.createCampaign({ title: 'Drafts', gmUserId: 'gm' });
+    await h.db.ensureProfile('wren', 'Wren');
+    expect(await h.db.loadDraft(c.id, 'wren')).toBeNull();
+    await h.db.saveDraft(c.id, 'wren', new Uint8Array([1, 2, 3]));
+    await h.db.saveDraft(c.id, 'wren', new Uint8Array([4, 5]));
+    expect(await h.db.loadDraft(c.id, 'wren')).toEqual(new Uint8Array([4, 5]));
+    expect(await h.db.loadDraft(c.id, 'gm')).toBeNull(); // someone else's slot is a different row
+    expect(await h.db.loadDocument(c.id)).toBeNull(); // and it is not the shared story
+    await fails(h.db.saveDraft('nope-nope', 'wren', new Uint8Array([1])), 'NOT_FOUND');
   });
 });
 
