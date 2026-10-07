@@ -12,3 +12,4 @@ export * from './conviction';
 export * from './modifiers';
 export * from './creation';
 export * from './flow';
+export * from './chips';

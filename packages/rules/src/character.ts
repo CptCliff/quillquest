@@ -31,6 +31,10 @@ export const rungRank = (rung: number): RatedSkillRank => RUNG_RANKS[Math.min(Ma
 
 export interface Character {
   id: string;
+  /** The account that plays this character; absent for non-player characters. */
+  ownerId?: string;
+  /** True once the player has left the campaign; the character stays in the roster. */
+  left?: boolean;
   name: string;
   origin: string;
   chapters: Chapter[];

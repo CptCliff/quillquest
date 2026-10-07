@@ -403,6 +403,13 @@ export function reopenForRetcon(card: PromptCard, actor: FlowActor): PromptCard 
   return { ...card, status: 'draft', set: null, roll: null, written: null, concession: null, appliedShifts: [], revealed: false, retcons: card.retcons + 1 };
 }
 
+/** Is this card waiting on this person? The GM sets big cards; the acting player rolls a Set card and writes the outcome. */
+export function needsAttention(card: PromptCard, who: FlowActor): boolean {
+  if (who.role === 'gm') return card.status === 'draft' && card.speed === 'big';
+  if (who.id !== card.actorId) return false;
+  return card.status === 'set' || card.status === 'rolled' || card.status === 'conceded';
+}
+
 // ---- views: what players may see ---------------------------------------------------------------------------------------
 
 interface DieView { sides: number; value: number }
