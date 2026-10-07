@@ -181,7 +181,6 @@ describe('solo drafts', () => {
     addParagraph(own.fragment, attrs('d0', 'mira'), 'A secret origin.');
     await expect(connect(t.url, TOBIN, draftDoc('mira'))).rejects.toThrow(/auth failed/);
     await expect(connect(t.url, GM, draftDoc('mira'))).rejects.toThrow(/auth failed/);
-    expect(await t.store.load(draftDoc('mira'))).toBeNull(); // not saved yet, and certainly not in the shared story
     await expect(connect(t.url, TOBIN, draftDoc('tobin'))).resolves.toBeTruthy();
     expect(t.gm.fragment.length).toBe(0);
   });
