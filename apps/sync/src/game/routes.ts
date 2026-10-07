@@ -1,11 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { DbError, type Db } from '@quillquest/db';
 import { RuleViolation, CONCESSION_KINDS, type BurdenOutcome, type ConcessionKind } from '@quillquest/rules';
-import { authenticate, type Identity } from '../auth';
+import type { Identity } from '../auth';
+import { verifyToken } from '../auth/env';
+import type { AuthProvider, Claims } from '../auth/types';
+import type { Directory } from '../directory';
 import type { DiceProvider } from './dice';
 import { GameError } from './errors';
 import type { ClientPatch, CreateCardInput, GameService, WrittenInput } from './service';
 
-export interface RouteOptions { service: GameService; dice: DiceProvider; secret: string; devDice: boolean }
+export interface RouteOptions {
+  service: GameService;
+  dice: DiceProvider;
+  providers: AuthProvider[];
+  directory: Directory;
+  /** Present when accounts are backed by Postgres; the account and invite routes need it. */
+  db?: Db;
+  devDice: boolean;
+}
 
 const CAMPAIGN = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_BODY = 64 * 1024;
@@ -34,15 +46,18 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
 };
 
 /** Rule breaches are conflicts, except being told you may not act at all. */
-function statusFor(e: RuleViolation): number {
-  return e.code === 'NOT_ALLOWED' ? 403 : 409;
-}
+const ruleStatus = (e: RuleViolation) => (e.code === 'NOT_ALLOWED' ? 403 : 409);
 
-function who(req: IncomingMessage, secret: string): Identity {
+const DB_STATUS: Record<string, number> = {
+  BAD_INPUT: 400, NOT_FOUND: 404, NO_PROFILE: 409, NOT_GM: 403, NOT_A_MEMBER: 403, GM_CANNOT_LEAVE: 409,
+  INVITE_USED: 409, INVITE_REVOKED: 410, INVITE_EXPIRED: 410,
+};
+
+async function identify(req: IncomingMessage, o: RouteOptions): Promise<Claims> {
   const h = req.headers.authorization ?? '';
   if (!h.startsWith('Bearer ')) throw new GameError(401, 'NO_TOKEN', 'Sign in first');
   try {
-    return authenticate(h.slice(7), secret);
+    return await verifyToken(o.providers, h.slice(7));
   } catch {
     throw new GameError(401, 'BAD_TOKEN', 'Your sign-in is not valid');
   }
@@ -53,35 +68,89 @@ const str = (v: unknown, name: string): string => {
   return v;
 };
 const optStr = (v: unknown) => (typeof v === 'string' ? v : undefined);
+const needDb = (o: RouteOptions): Db => {
+  if (!o.db) throw new GameError(501, 'NOT_CONFIGURED', 'Accounts are not configured on this server');
+  return o.db;
+};
 
 /**
- * Handles `/api/campaigns/:id/...`. Returns false for anything else so the server can answer normally.
- * Every route authenticates, takes the role from the signed token, and never returns dice except the GM's dice route.
+ * Handles `/api/...`. Returns false for anything else so the server can answer normally.
+ * Every route authenticates the caller; a campaign route also requires membership, and the role comes from the membership,
+ * never from the token. Dice never appear except on the GM's dice route.
  */
 export async function handleGameRequest(req: IncomingMessage, res: ServerResponse, o: RouteOptions): Promise<boolean> {
   const url = new URL(req.url ?? '/', 'http://localhost');
   if (!url.pathname.startsWith('/api/')) return false;
   try {
-    const parts = url.pathname.split('/').filter(Boolean); // api, campaigns, :c, ...
+    const parts = url.pathname.split('/').filter(Boolean); // api, ...
     const method = req.method ?? 'GET';
+    const ok = (body: unknown) => (send(res, 200, body), true);
 
     // Dev only: queue the next dice. Never mounted in production.
     if (parts[1] === 'dev' && parts[2] === 'campaigns' && parts[4] === 'dice' && method === 'POST') {
       if (!o.devDice) throw new GameError(404, 'NOT_FOUND', 'No such route');
-      const body = await readJson(req);
-      const values = body.values;
+      const values = (await readJson(req)).values;
       if (!Array.isArray(values) || !values.every((v) => Number.isInteger(v))) throw new GameError(400, 'BAD_INPUT', 'values must be a list of integers');
       o.dice.queue(parts[3]!, values as number[]);
-      return send(res, 200, { queued: values.length }), true;
+      return ok({ queued: values.length });
     }
 
+    const claims = await identify(req, o);
+    if (o.db) await o.db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color);
+
+    // ---- account routes (no campaign yet) --------------------------------------------------------------------------
+    if (parts[1] === 'me' && parts.length === 2 && method === 'GET') {
+      const db = needDb(o);
+      return ok({ userId: claims.userId, email: claims.email ?? null, profile: await db.getProfile(claims.userId), campaigns: await db.listCampaignsFor(claims.userId) });
+    }
+    if (parts[1] === 'me' && parts[2] === 'profile' && method === 'PUT') {
+      const db = needDb(o);
+      const b = await readJson(req);
+      await db.upsertProfile(claims.userId, { displayName: str(b.displayName, 'displayName'), preferredColor: optStr(b.preferredColor) ?? null });
+      return ok({ profile: await db.getProfile(claims.userId) });
+    }
+    if (parts[1] === 'campaigns' && parts.length === 2 && method === 'POST') {
+      const db = needDb(o);
+      const c = await db.createCampaign({ title: str((await readJson(req)).title, 'title'), gmUserId: claims.userId });
+      return ok({ campaign: { id: c.id, title: c.title } });
+    }
+    if (parts[1] === 'invites' && parts[2] === 'accept' && method === 'POST') {
+      const db = needDb(o);
+      const joined = await db.acceptInvite(str((await readJson(req)).token, 'token'), claims.userId);
+      const actor = await o.directory.resolve(claims, joined.campaignId);
+      if (actor) await o.service.onJoin(joined.campaignId, actor);
+      return ok(joined);
+    }
+
+    // ---- campaign routes ---------------------------------------------------------------------------------------------
     if (parts[1] !== 'campaigns' || !parts[2]) throw new GameError(404, 'NOT_FOUND', 'No such route');
     const campaign = parts[2];
     if (!CAMPAIGN.test(campaign)) throw new GameError(400, 'BAD_CAMPAIGN', 'Bad campaign id');
-    const actor = who(req, o.secret);
+    const actor: Identity | null = await o.directory.resolve(claims, campaign);
+    if (!actor) throw new GameError(403, 'NOT_A_MEMBER', 'You are not in this campaign');
+    if (actor.left && method !== 'GET') throw new GameError(403, 'LEFT', 'You have left this campaign; you can still read it');
     const svc = o.service;
     const rest = parts.slice(3);
-    const ok = (body: unknown) => (send(res, 200, body), true);
+
+    if (rest[0] === 'members' && method === 'GET') {
+      const members = await needDb(o).listMembers(campaign);
+      return ok({ members: members.map((m) => ({ userId: m.userId, displayName: m.displayName, color: m.color, role: m.role, left: m.left })) });
+    }
+    if (rest[0] === 'leave' && method === 'POST') {
+      await needDb(o).leave(campaign, actor.id);
+      await svc.onLeave(campaign, actor);
+      return ok({ left: true });
+    }
+    if (rest[0] === 'invites') {
+      const db = needDb(o);
+      if (actor.role !== 'gm') throw new GameError(403, 'GM_ONLY', 'Only the GM manages invites');
+      if (rest.length === 1 && method === 'POST') {
+        const inv = await db.createInvite(campaign, actor.id);
+        return ok({ invite: { id: inv.id, token: inv.token, expiresAt: inv.expiresAt } });
+      }
+      if (rest.length === 1 && method === 'GET') return ok({ invites: await db.listInvites(campaign) });
+      if (rest.length === 2 && method === 'DELETE') { await db.revokeInvite(campaign, rest[1]!); return ok({ revoked: true }); }
+    }
 
     if (rest[0] === 'me' && method === 'GET') return ok(await svc.me(campaign, actor));
 
@@ -137,7 +206,8 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
     throw new GameError(404, 'NOT_FOUND', 'No such route');
   } catch (e) {
     if (e instanceof GameError) send(res, e.status, { error: { code: e.code, message: e.message } });
-    else if (e instanceof RuleViolation) send(res, statusFor(e), { error: { code: e.code, message: e.message } });
+    else if (e instanceof RuleViolation) send(res, ruleStatus(e), { error: { code: e.code, message: e.message } });
+    else if (e instanceof DbError) send(res, DB_STATUS[e.code] ?? 400, { error: { code: e.code, message: e.message } });
     else {
       console.error('game route failed', e);
       send(res, 500, { error: { code: 'INTERNAL', message: 'Something went wrong' } });

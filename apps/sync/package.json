@@ -15,11 +15,16 @@
     "yjs": "13.6.33",
     "y-protocols": "^1.0.6",
     "lib0": "^0.2.100",
-    "@quillquest/rules": "workspace:*"
+    "@quillquest/rules": "workspace:*",
+    "jose": "^6.2.12",
+    "@quillquest/db": "workspace:*",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@electric-sql/pglite": "0.5.8"
   },
   "exports": {
     "./auth": "./src/auth.ts"

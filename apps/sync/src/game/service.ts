@@ -8,7 +8,7 @@ import { lockThrough, type StoryDoc } from '@quillquest/story';
 import type { Identity } from '../auth';
 import type { DiceProvider } from './dice';
 import { GameError } from './errors';
-import { seedDevCharacter } from './dev-characters';
+import { seedDevCharacter, starterCharacter } from './dev-characters';
 import type { GameState, GameStore } from './store';
 
 /** The campaign document, as the game sees it. The Hocuspocus version writes to the live Yjs doc; tests use a fake. */
@@ -67,12 +67,12 @@ export class GameService {
     return next;
   }
 
+  /** Every player has a character from their first visit: a preset dev sheet, or the next starter template. */
   private ensureCharacter(s: GameState, actor: Identity) {
     if (actor.role === 'gm' || s.characterOf[actor.id]) return;
-    const seeded = seedDevCharacter(actor.id);
-    if (!seeded) throw new GameError(403, 'NO_CHARACTER', 'You have no character in this campaign yet');
-    s.characters[seeded.id] = seeded;
-    s.characterOf[actor.id] = seeded.id;
+    const made = seedDevCharacter(actor.id) ?? starterCharacter(actor.id, actor.name, Object.keys(s.characters).length);
+    s.characters[made.id] = made;
+    s.characterOf[actor.id] = made.id;
   }
 
   private card(s: GameState, id: string): PromptCard {
@@ -269,6 +269,24 @@ export class GameService {
       s.cards[cardId] = reopened;
       s.overrides.push({ at: (this.d.now?.() ?? new Date()).toISOString(), gmId: actor.id, action: 'retcon', cardId });
       return toPublicCard(reopened);
+    });
+  }
+
+  // ---- membership --------------------------------------------------------------------------------------------------
+
+  /** A player joined (or came back): they get a character, and it is no longer marked as left. */
+  async onJoin(campaign: string, actor: Identity): Promise<void> {
+    await this.mutate(campaign, actor, (s) => {
+      const id = s.characterOf[actor.id];
+      if (id && s.characters[id]) s.characters[id] = { ...s.characters[id]!, left: false, name: s.characters[id]!.name };
+    });
+  }
+
+  /** A player left: their character stays in the roster, marked as having left. */
+  async onLeave(campaign: string, actor: Identity): Promise<void> {
+    await this.mutate(campaign, actor, (s) => {
+      const id = s.characterOf[actor.id];
+      if (id && s.characters[id]) s.characters[id] = { ...s.characters[id]!, left: true };
     });
   }
 

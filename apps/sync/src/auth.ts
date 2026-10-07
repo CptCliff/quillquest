@@ -6,6 +6,8 @@ export interface Identity extends Actor {
   name: string;
   /** The writer's ink color. */
   color: string;
+  /** The member has left the campaign: they may read the story but not change it. */
+  left?: boolean;
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url');

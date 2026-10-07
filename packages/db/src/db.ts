@@ -73,10 +73,11 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
         [userId, name, p.preferredColor?.toLowerCase() ?? null],
       );
     },
-    /** First sign-in: a profile named from the email, never overwriting one the person already chose. */
-    async ensureProfile(userId: string, email?: string | null): Promise<void> {
-      const name = (email?.split('@')[0] || 'Player').slice(0, 40);
-      await sql.query('insert into profiles (user_id, display_name) values ($1, $2) on conflict (user_id) do nothing', [userId, name]);
+    /** First sign-in: a profile named from a name or an email, never overwriting one the person already chose. */
+    async ensureProfile(userId: string, hint?: string | null, preferredColor?: string | null): Promise<void> {
+      const name = (hint?.split('@')[0]?.trim() || 'Player').slice(0, 40);
+      const color = isHexColor(preferredColor) ? preferredColor.toLowerCase() : null;
+      await sql.query('insert into profiles (user_id, display_name, preferred_color) values ($1, $2, $3) on conflict (user_id) do nothing', [userId, name, color]);
     },
     getProfile: (userId: string) => profileIn(sql, userId),
 

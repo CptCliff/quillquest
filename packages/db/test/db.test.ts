@@ -34,6 +34,12 @@ describe('profiles', () => {
     await fails(h.db.upsertProfile('x', { displayName: 'X', preferredColor: 'red' }), 'BAD_INPUT');
     expect(await h.db.getProfile('nobody')).toBeNull();
   });
+  it('ensureProfile can start a profile with a color, and never overwrites a chosen name or color', async () => {
+    await h.db.ensureProfile('colorful', 'Colorful', '#ABCDEF');
+    expect(await h.db.getProfile('colorful')).toMatchObject({ displayName: 'Colorful', preferredColor: '#abcdef' });
+    await h.db.ensureProfile('colorful', 'Other', '#000000');
+    expect(await h.db.getProfile('colorful')).toMatchObject({ displayName: 'Colorful', preferredColor: '#abcdef' });
+  });
   it('ensureProfile creates once and never overwrites a chosen name', async () => {
     await h.db.ensureProfile('newbie', 'newbie@example.com');
     expect((await h.db.getProfile('newbie'))?.displayName).toBe('newbie');

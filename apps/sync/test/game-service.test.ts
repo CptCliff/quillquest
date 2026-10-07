@@ -242,10 +242,23 @@ describe('retcon', () => {
 });
 
 describe('who may do what', () => {
-  it('the GM has no character and opens no cards; unknown users have none', async () => {
+  it('the GM has no character and opens no cards; any other player gets a starter character, named for them, owned by them', async () => {
     const t = setup();
     expect((await reject(t.svc.createCard(C, GM, { skillName: 'Climb' })) as GameError).status).toBe(403);
-    expect((await reject(t.svc.createCard(C, { ...ILSE, id: 'stranger' }, { skillName: 'Climb' })) as GameError).code).toBe('NO_CHARACTER');
+    const newcomer = { id: 'uuid-1234', name: 'Wren', role: 'player' as const, color: '#0e7490' };
+    const me = (await t.svc.me(C, newcomer)).character!;
+    expect(me).toMatchObject({ id: 'uuid-1234-pc', name: 'Wren', ownerId: 'uuid-1234' });
+    expect(me.skills.length).toBeGreaterThan(0); // the first starter uses the first template
+    const second = (await t.svc.me(C, { ...newcomer, id: 'uuid-5678', name: 'Pike' })).character!;
+    expect(second.skills.map((s) => s.name)).not.toEqual(me.skills.map((s) => s.name)); // the next template
+  });
+  it('a player who leaves keeps their character, marked left; rejoining clears it', async () => {
+    const t = setup();
+    await t.svc.me(C, ILSE);
+    await t.svc.onLeave(C, ILSE);
+    expect(t.docs.published!.characters['ilse-pc']).toMatchObject({ left: true });
+    await t.svc.onJoin(C, ILSE);
+    expect(t.docs.published!.characters['ilse-pc']).toMatchObject({ left: false });
   });
   it('another player cannot edit, roll, push, concede on or write someone else\'s card', async () => {
     const t = setup();
