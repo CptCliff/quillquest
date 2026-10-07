@@ -8,9 +8,12 @@ import type { Directory } from '../directory';
 import type { DiceProvider } from './dice';
 import { GameError } from './errors';
 import type { ClientPatch, CreateCardInput, GameService, WrittenInput } from './service';
+import type { DirectorService } from './director';
+import { handleDirector } from './director-routes';
 
 export interface RouteOptions {
   service: GameService;
+  director: DirectorService;
   dice: DiceProvider;
   providers: AuthProvider[];
   directory: Directory;
@@ -47,8 +50,8 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
-/** Rule breaches are conflicts, except being told you may not act at all. */
-const ruleStatus = (e: RuleViolation) => (e.code === 'NOT_ALLOWED' ? 403 : 409);
+/** Rule breaches are conflicts, except being told you may not act at all, or sending something malformed. */
+const ruleStatus = (e: RuleViolation) => (e.code === 'NOT_ALLOWED' ? 403 : e.code === 'BAD_INPUT' ? 400 : 409);
 
 const DB_STATUS: Record<string, number> = {
   BAD_INPUT: 400, NOT_FOUND: 404, NO_PROFILE: 409, NOT_GM: 403, NOT_A_MEMBER: 403, GM_CANNOT_LEAVE: 409,
@@ -156,6 +159,9 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
     }
 
     if (rest[0] === 'me' && method === 'GET') return ok(await svc.me(campaign, actor));
+
+    const handled = await handleDirector(o.director, campaign, actor, rest, method, () => readJson(req));
+    if (handled !== undefined) return ok(handled);
 
     // Session zero. `POST /creation/:step` runs one step; the rules say whether it is allowed.
     if (rest[0] === 'creation') {

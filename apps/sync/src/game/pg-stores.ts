@@ -1,6 +1,6 @@
 import type { Db } from '@quillquest/db';
 import type { DocumentStore } from '../store';
-import { draftOwner, campaignOf } from './docnames';
+import { campaignOf, draftOwner, isGmDoc } from './docnames';
 import { emptyState, normalizeState, type GameState, type GameStore } from './store';
 
 /** Game records in Postgres, one JSON row per campaign. */
@@ -19,10 +19,12 @@ export class PgGameStore implements GameStore {
 export class PgDocumentStore implements DocumentStore {
   constructor(private db: Db) {}
   load(name: string) {
+    if (isGmDoc(name)) return this.db.loadGmDocument(campaignOf(name));
     const owner = draftOwner(name);
     return owner ? this.db.loadDraft(campaignOf(name), owner) : this.db.loadDocument(name);
   }
   save(name: string, state: Uint8Array) {
+    if (isGmDoc(name)) return this.db.saveGmDocument(campaignOf(name), state);
     const owner = draftOwner(name);
     return owner ? this.db.saveDraft(campaignOf(name), owner, state) : this.db.saveDocument(name, state);
   }

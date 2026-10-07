@@ -8,7 +8,7 @@ export interface DocumentStore {
 }
 
 const safe = (name: string) => {
-  if (!/^[A-Za-z0-9_-]{1,64}(~draft~[A-Za-z0-9_-]{1,64})?$/.test(name)) throw new Error(`bad document name: ${name}`);
+  if (!/^[A-Za-z0-9_-]{1,64}(~draft~[A-Za-z0-9_-]{1,64}|~gm)?$/.test(name)) throw new Error(`bad document name: ${name}`);
   return name;
 };
 

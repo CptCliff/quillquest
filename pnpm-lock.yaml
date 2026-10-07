@@ -26,6 +26,9 @@ importers:
       '@quillquest/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@quillquest/prompts':
+        specifier: workspace:*
+        version: link:../../packages/prompts
       '@quillquest/rules':
         specifier: workspace:*
         version: link:../../packages/rules

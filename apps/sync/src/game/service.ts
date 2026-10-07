@@ -1,8 +1,8 @@
 import {
-  RuleViolation, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
+  RuleViolation, publicNpc, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
   markWritten, outcomePrompt, previewCard, pushCard, pushOptions, reopenForRetcon, resolveSkill, revertCosts, rollCard, suggestShifts, toPublicCard,
   newCard, type BurdenOutcome, type CardPatch, type Character, type ConcessionKind, type CostInput, type DiceView, type FlowActor,
-  type CanonEntry, type CreationState, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
+  type CanonEntry, type ConvictionLogEntry, type CreationState, type PublicNpc, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
 } from '@quillquest/rules';
 import { lockThrough, type StoryDoc } from '@quillquest/story';
 import type { Identity } from '../auth';
@@ -30,7 +30,10 @@ export interface Projection {
   characters: Record<string, Character>;
   creation: Record<string, CreationState>;
   canon: Record<string, CanonEntry>;
-  campaign: { phase: GameState['phase']; crossings: GameState['proposals']; overrides: GameState['checkOverrides'] };
+  /** Only what the GM has revealed of each NPC. */
+  npcs: Record<string, PublicNpc>;
+  convictionLog: Record<string, ConvictionLogEntry>;
+  campaign: { phase: GameState['phase']; crossings: GameState['proposals']; overrides: GameState['checkOverrides']; themes: string };
 }
 
 export type LedgerEntry = PublicCard & { seq: number };
@@ -61,7 +64,7 @@ export class GameService {
   constructor(private d: GameDeps) {}
 
   /** One mutation at a time per campaign; a failure leaves nothing behind (state is cloned and only saved on success). */
-  private async mutate<T>(campaign: string, actor: Identity, fn: (s: GameState) => Promise<T> | T): Promise<T> {
+  async mutate<T>(campaign: string, actor: Identity, fn: (s: GameState) => Promise<T> | T): Promise<T> {
     const prev = this.chains.get(campaign) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(async () => {
       const state = await this.d.store.load(campaign);
@@ -75,7 +78,7 @@ export class GameService {
     return next;
   }
 
-  private async read<T>(campaign: string, actor: Identity, fn: (s: GameState) => Promise<T> | T): Promise<T> {
+  async read<T>(campaign: string, actor: Identity, fn: (s: GameState) => Promise<T> | T): Promise<T> {
     const prev = this.chains.get(campaign) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(async () => {
       const state = await this.d.store.load(campaign);
@@ -116,7 +119,9 @@ export class GameService {
     await this.d.docs.publish(campaign, {
       ledger, characters: s.characters, creation: s.creation,
       canon: Object.fromEntries(s.canon.map((e) => [e.id, e])),
-      campaign: { phase: s.phase, crossings: s.proposals, overrides: s.checkOverrides },
+      npcs: Object.fromEntries(Object.values(s.npcs).flatMap((n) => { const p = publicNpc(n); return p ? [[n.id, p]] : []; })),
+      convictionLog: Object.fromEntries(s.convictionLog.map((e) => [e.id, e])),
+      campaign: { phase: s.phase, crossings: s.proposals, overrides: s.checkOverrides, themes: s.themes },
     });
   }
 

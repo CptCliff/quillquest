@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CanonEntry, CheckOverride, Character, CreationState, CrossingProposal, Draft, PromptCard } from '@quillquest/rules';
+import type { CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, Draft, Nomination, Npc, PromptCard } from '@quillquest/rules';
 
 export interface OverrideEntry { at: string; gmId: string; action: 'retcon'; cardId: string }
 
@@ -24,11 +24,26 @@ export interface GameState {
   wseq: number;
   /** Solo-draft trackers by user id. The draft prose itself is a private document; this is only its bookkeeping. */
   drafts: Record<string, Draft>;
+  /** The GM's table (M6). NPC sheets keep their hidden fields here and nowhere else; only revealed fields are ever published. */
+  npcs: Record<string, Npc>;
+  nominations: Nomination[];
+  convictionLog: ConvictionLogEntry[];
+  /** Counter for ids made by the Director rules. */
+  dseq: number;
+  /** Which session of play this is; Beliefs earn Conviction again each session, and the Claude call cap is per session. */
+  sessionNo: number;
+  /** Themes to handle lightly or leave out (public: every prompt carries them). */
+  themes: string;
+  /** The campaign's six table-written Burden faces (GM only). */
+  faces: string[];
+  /** Claude calls allowed per session; 0 turns the assistant off. */
+  llmCap: number;
 }
 
 export const emptyState = (): GameState => ({
   seq: 0, cards: {}, order: [], characters: {}, characterOf: {}, overrides: [],
   phase: 'sessionZero', creation: {}, canon: [], proposals: [], checkOverrides: [], wseq: 0, drafts: {},
+  npcs: {}, nominations: [], convictionLog: [], dseq: 0, sessionNo: 1, themes: '', faces: [], llmCap: 30,
 });
 
 /**

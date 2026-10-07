@@ -10,6 +10,8 @@ export const CHARACTERS = 'characters';
 export const CREATION = 'creation';
 export const CANON = 'canon';
 export const CAMPAIGN = 'campaign';
+export const NPCS = 'npcs';
+export const CONVICTION_LOG = 'convictionLog';
 
 /** Reads and writes the live campaign document from the server. These writes bypass the client edit policy on purpose. */
 export class HocuspocusDocPort implements DocPort {
@@ -71,6 +73,8 @@ export class HocuspocusDocPort implements DocPort {
       put(CREATION, projection.creation);
       put(CANON, projection.canon);
       put(CAMPAIGN, projection.campaign);
+      put(NPCS, projection.npcs);
+      put(CONVICTION_LOG, projection.convictionLog);
     });
   }
 }

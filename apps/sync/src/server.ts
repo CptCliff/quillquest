@@ -13,8 +13,11 @@ import { FileStore, type DocumentStore } from './store';
 import { QueuedDice, type DiceProvider } from './game/dice';
 import { HocuspocusDocPort } from './game/docport';
 import { handleGameRequest } from './game/routes';
-import { campaignOf, draftOwner } from './game/docnames';
+import { campaignOf, draftOwner, isGmDoc } from './game/docnames';
+import { DirectorService } from './game/director';
 import { GameService } from './game/service';
+import { MemorySuggestionLog, PgSuggestionLog, type SuggestionLog } from './game/suggestions';
+import { providerFromEnv, type LlmProvider } from './llm';
 import { FileGameStore, MemoryGameStore, type GameStore } from './game/store';
 
 export interface SyncServerOptions {
@@ -31,7 +34,9 @@ export interface SyncServerOptions {
    */
   auth?: { providers?: AuthProvider[]; directory?: Directory; db?: Db };
   /** The game (cards, rolls, characters). Defaults to an in-memory store and random dice. */
-  game?: { store?: GameStore; dice?: DiceProvider; /** Dev only: mounts the route that queues the next dice. */ devDice?: boolean };
+  /** The language model behind the Claude assistant. Omitted means "not configured": its routes answer 501. */
+  llm?: LlmProvider | null;
+  game?: { store?: GameStore; dice?: DiceProvider; /** Dev only: mounts the route that queues the next dice. */ devDice?: boolean; suggestions?: SuggestionLog };
 }
 
 /**
@@ -68,6 +73,8 @@ export function createSyncServer(opts: SyncServerOptions) {
       // A solo draft is private: only its author may open it. The GM and the other players are strangers to it.
       const owner = draftOwner(documentName);
       if (owner && owner !== identity.id) throw new Error('not your draft');
+      // The GM's notes are the GM's alone, and no one else is told they exist.
+      if (isGmDoc(documentName) && identity.role !== 'gm') throw new Error('not allowed');
       // A member who left may still read the story. Hocuspocus drops every write on a read-only connection (its normal sync
       // handshake still works), so there is nothing for us to reject, and rejecting would only make their browser reconnect forever.
       if (identity.left) connectionConfig.readOnly = true;
@@ -112,14 +119,16 @@ export function createSyncServer(opts: SyncServerOptions) {
     dice,
     docs: new HocuspocusDocPort(server.hocuspocus),
   });
+  const docs = new HocuspocusDocPort(server.hocuspocus);
+  const director = new DirectorService(service, { llm: opts.llm ?? null, log: (opts.game?.suggestions ?? (db ? new PgSuggestionLog(db) : new MemorySuggestionLog())), docs });
   /** Closes a person's live connections to one campaign; they reconnect and are authenticated afresh (as read-only if they left). */
   const dropConnections = (campaign: string, userId: string) => {
     server.hocuspocus.documents.get(campaign)?.connections.forEach((_entry, conn) => {
       if ((conn.context as { identity?: Identity } | undefined)?.identity?.id === userId) conn.close({ code: 1000, reason: MEMBERSHIP_CHANGED });
     });
   };
-  game = (req, res) => handleGameRequest(req, res, { service, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
-  return Object.assign(server, { game: service });
+  game = (req, res) => handleGameRequest(req, res, { service, director, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
+  return Object.assign(server, { game: service, director });
 }
 
 // Run directly: `pnpm --filter @quillquest/sync dev`
@@ -151,6 +160,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const server = createSyncServer({
     store: db ? new PgDocumentStore(db) : new FileStore(dir), port, quiet: false,
     auth: { providers, db },
+    llm: providerFromEnv(env, production),
     game: { store: db ? undefined : new FileGameStore(dir), devDice: devAuth && env.QUILLQUEST_DEV_DICE === '1' },
   });
   await server.listen();
