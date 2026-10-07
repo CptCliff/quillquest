@@ -1,0 +1,61 @@
+/*
+ * Design tokens. Everything the interface looks like comes from these custom properties: colour, type, space, shape, elevation, motion.
+ * Light is the default; dark follows the system unless the person chose one (data-theme on <html>). The dark block appears twice, once for
+ * the system setting and once for the manual choice; tokens.test.ts checks they are identical and that every pair meets WCAG contrast.
+ */
+:root {
+  color-scheme: light;
+  /* surfaces */
+  --surface: #faf8f4; --surface-raised: #ffffff; --surface-sunken: #f1ede4; --border: #d3ccbd; --border-strong: #8c8473;
+  /* text */
+  --text: #1d1b17; --text-muted: #5b564b; --text-on-accent: #ffffff;
+  /* accent and focus */
+  --accent: #8a3b12; --accent-hover: #6f2e0d; --focus: #1d4ed8;
+  /* meaning */
+  --ok-bg: #dcfce7; --ok-fg: #14532d; --bad-bg: #fee2e2; --bad-fg: #7f1d1d; --warn-bg: #fef3c7; --warn-fg: #6b3410; --warn-border: #b45309;
+  /* writers' ink: how much white is mixed in when ink is used as a line or dot against this surface */
+  --ink-lift: 0%;
+  /* type */
+  --font-prose: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --text-xs: 12px; --text-s: 13px; --text-m: 14px; --text-l: 16px; --text-prose: 17px; --text-xl: 20px;
+  --leading: 1.55;
+  /* space, shape, elevation, motion */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+  --radius-s: 4px; --radius: 8px; --radius-l: 12px;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 8%); --shadow-2: 0 6px 20px rgb(0 0 0 / 14%);
+  --dur-fast: 120ms; --dur: 200ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --tap: 44px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --surface: #15130e; --surface-raised: #1f1c15; --surface-sunken: #1a1812; --border: #3d3829; --border-strong: #8f8873;
+    --text: #ece8dd; --text-muted: #aca695; --text-on-accent: #1b1006;
+    --accent: #e8a56a; --accent-hover: #f0b887; --focus: #93c5fd;
+    --ok-bg: #14532d; --ok-fg: #bbf7d0; --bad-bg: #7f1d1d; --bad-fg: #fecaca; --warn-bg: #4a3010; --warn-fg: #fde68a; --warn-border: #b45309;
+    --ink-lift: 45%;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 40%); --shadow-2: 0 6px 20px rgb(0 0 0 / 55%);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #15130e; --surface-raised: #1f1c15; --surface-sunken: #1a1812; --border: #3d3829; --border-strong: #8f8873;
+  --text: #ece8dd; --text-muted: #aca695; --text-on-accent: #1b1006;
+  --accent: #e8a56a; --accent-hover: #f0b887; --focus: #93c5fd;
+  --ok-bg: #14532d; --ok-fg: #bbf7d0; --bad-bg: #7f1d1d; --bad-fg: #fecaca; --warn-bg: #4a3010; --warn-fg: #fde68a; --warn-border: #b45309;
+  --ink-lift: 45%;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 40%); --shadow-2: 0 6px 20px rgb(0 0 0 / 55%);
+}
+
+/* Older names, kept so existing rules keep working; new code uses the tokens above. */
+:root {
+  --bg: var(--surface); --fg: var(--text); --muted: var(--text-muted); --panel: var(--surface-sunken); --line: var(--border);
+  --ins-bg: var(--ok-bg); --ins-fg: var(--ok-fg); --del-bg: var(--bad-bg); --del-fg: var(--bad-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

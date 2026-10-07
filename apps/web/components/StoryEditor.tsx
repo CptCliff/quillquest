@@ -15,6 +15,22 @@ import { SkillChips } from '../extensions/skill-chips';
 import type { Skill } from '@quillquest/rules';
 import { inkFor, nameFor } from '../lib/dev-users';
 import { explain } from '../lib/violations';
+import { readableOn } from '../lib/color';
+
+/** A remote writer's caret and name label, with a label colour that is readable on their ink. */
+function caret(user: { name?: string; color?: string }): HTMLElement {
+  const color = user.color && /^#[0-9a-f]{6}$/i.test(user.color) ? user.color : '#444444';
+  const el = document.createElement('span');
+  el.classList.add('collaboration-carets__caret');
+  el.style.borderColor = color;
+  const label = document.createElement('div');
+  label.classList.add('collaboration-carets__label');
+  label.style.backgroundColor = color;
+  label.style.color = readableOn(color);
+  label.append(user.name ?? '');
+  el.append(label);
+  return el;
+}
 
 export interface Me { id: string; name: string; color: string; role: 'player' | 'gm'; left?: boolean }
 
@@ -36,7 +52,7 @@ export function StoryEditor({ doc, provider, me, onEditor, onNotice, mySkills, o
     extensions: [
       Document, Text, StoryParagraph, Insertion, Deletion, Modification,
       Collaboration.configure({ document: doc, field: 'default' }),
-      CollaborationCaret.configure({ provider, user: { name: me.name, color: me.color } }),
+      CollaborationCaret.configure({ provider, user: { name: me.name, color: me.color }, render: caret }),
       StoryGuard.configure({ userId: me.id, role: me.role, ink, onReject: (v) => onNotice(explain(v)), onOpenAuthor }),
       SkillChips.configure({ userId: me.id, getSkills: mySkills, onInfo: onChipInfo, onRoll: onChipRoll, suggest: onSuggest }),
     ],

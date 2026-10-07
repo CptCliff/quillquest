@@ -1,4 +1,5 @@
 'use client';
+import { ThemeToggle } from './ThemeToggle';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AccountApi, ApiClient, ApiFailure, type CampaignSummary, type Profile } from '../lib/game-api';
@@ -23,7 +24,7 @@ export function Dashboard() {
 
   return (
     <main className="home" data-testid="dashboard">
-      <header className="row"><h1>Quillquest</h1><button onClick={() => session.signOut()} data-testid="sign-out">Sign out</button></header>
+      <header className="row"><h1>Quillquest</h1><span className="row"><ThemeToggle /><button onClick={() => session.signOut()} data-testid="sign-out">Sign out</button></span></header>
       {note && <p role="alert" className="notice" data-testid="dash-notice">{note}</p>}
 
       <section aria-label="Your profile">

@@ -10,7 +10,9 @@ import { useYMap } from '../lib/use-ymap';
 import { InfoCard, type OpenCard } from './InfoCard';
 import { NotesPane, type NotesTab, type ZeroState } from './NotesPane';
 import { SpotlightBar, type SpotlightState } from './SpotlightBar';
+import { readableOn } from '../lib/color';
 import { StoryEditor, type Me } from './StoryEditor';
+import { ThemeToggle } from './ThemeToggle';
 
 const SPLIT_KEY = 'qq.split';
 function loadSplit(): number {
@@ -138,8 +140,9 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
       <header>
         <Link href="/" aria-label="Your campaigns">←</Link>
         <strong>{title || 'Quillquest'}</strong>
-        <span className="pill" data-testid="me" style={{ background: me.color }}>{me.name}{me.role === 'gm' ? ' · GM' : ''}</span>
+        <span className="pill" data-testid="me" style={{ background: me.color, color: readableOn(me.color) }}>{me.name}{me.role === 'gm' ? ' · GM' : ''}</span>
         <span className="muted" data-testid="status">{status}</span>
+        <ThemeToggle />
         <span className="peers" data-testid="peers">{peers.map((p) => <span key={p.key} className="dot" title={p.name} style={{ background: p.color }} />)}</span>
       </header>
       {me.left && <div role="status" className="notice" data-testid="left-banner">You left this campaign. You can read the story, but not change it.</div>}

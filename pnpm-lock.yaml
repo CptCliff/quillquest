@@ -139,6 +139,9 @@ importers:
       '@playwright/test':
         specifier: 1.56.1
         version: 1.56.1
+      '@quillquest/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.5

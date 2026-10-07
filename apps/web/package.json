@@ -38,6 +38,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@playwright/test": "1.56.1"
+    "@playwright/test": "1.56.1",
+    "@quillquest/db": "workspace:*"
   }
 }
