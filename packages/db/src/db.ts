@@ -13,6 +13,10 @@ export type SuggestionStatus = 'shown' | 'used' | 'edited' | 'dismissed' | 'fail
 export const SUGGESTION_STATUSES: SuggestionStatus[] = ['shown', 'used', 'edited', 'dismissed', 'failed'];
 export interface Suggestion { id: string; campaignId: string; userId: string; kind: string; input: unknown; output: unknown; status: SuggestionStatus; sessionNo: number; provider: string; createdAt: Date }
 
+export type NotifyMode = 'immediate' | 'digest' | 'off';
+export const NOTIFY_MODES: NotifyMode[] = ['immediate', 'digest', 'off'];
+export interface QueuedNotification { id: string; campaignId: string; userId: string; kind: string; text: string; link: string; createdAt: Date }
+
 export interface DbOptions { now?: () => Date }
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -78,10 +82,40 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
       );
     },
     /** First sign-in: a profile named from a name or an email, never overwriting one the person already chose. */
-    async ensureProfile(userId: string, hint?: string | null, preferredColor?: string | null): Promise<void> {
+    async ensureProfile(userId: string, hint?: string | null, preferredColor?: string | null, email?: string | null): Promise<void> {
       const name = (hint?.split('@')[0]?.trim() || 'Player').slice(0, 40);
       const color = isHexColor(preferredColor) ? preferredColor.toLowerCase() : null;
       await sql.query('insert into profiles (user_id, display_name, preferred_color) values ($1, $2, $3) on conflict (user_id) do nothing', [userId, name, color]);
+      if (email && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) await sql.query('update profiles set email = $2 where user_id = $1 and email is distinct from $2', [userId, email]);
+    },
+    async getEmail(userId: string): Promise<string | null> {
+      return ((await sql.query<{ email: string | null }>('select email from profiles where user_id = $1', [userId])).rows[0]?.email) ?? null;
+    },
+
+    // ---- notification preferences and the queue --------------------------------------------------------------------------
+    async getNotifyMode(campaignId: string, userId: string): Promise<NotifyMode> {
+      return ((await sql.query<{ mode: NotifyMode }>('select mode from notification_prefs where campaign_id = $1 and user_id = $2', [campaignId, userId])).rows[0]?.mode) ?? 'immediate';
+    },
+    async setNotifyMode(campaignId: string, userId: string, mode: NotifyMode): Promise<void> {
+      if (!NOTIFY_MODES.includes(mode)) throw new DbError('BAD_INPUT', 'Notifications are immediate, a daily digest, or off');
+      try {
+        await sql.query('insert into notification_prefs (campaign_id, user_id, mode) values ($1, $2, $3) on conflict (campaign_id, user_id) do update set mode = excluded.mode', [campaignId, userId, mode]);
+      } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
+    },
+    /** Returns null when a message with the same dedupe key is already queued (or was sent): a reminder goes out once. */
+    async queueNotification(n: { campaignId: string; userId: string; kind: string; text: string; link: string; dedupeKey?: string }): Promise<{ id: string } | null> {
+      const id = randomBytes(8).toString('base64url');
+      const r = await sql.query(
+        `insert into notification_queue (id, campaign_id, user_id, kind, text, link, dedupe_key, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict do nothing`,
+        [id, n.campaignId, n.userId, n.kind, n.text, n.link, n.dedupeKey ?? null, now()]);
+      return r.rowCount === 0 ? null : { id };
+    },
+    async pendingNotifications(): Promise<QueuedNotification[]> {
+      const rows = (await sql.query<Row>('select id, campaign_id, user_id, kind, text, link, created_at from notification_queue where sent_at is null order by created_at, id')).rows;
+      return rows.map((r) => ({ id: r.id as string, campaignId: r.campaign_id as string, userId: r.user_id as string, kind: r.kind as string, text: r.text as string, link: r.link as string, createdAt: new Date(r.created_at as string) }));
+    },
+    async markNotificationsSent(ids: string[]): Promise<void> {
+      if (ids.length) await sql.query('update notification_queue set sent_at = $2 where id = any($1::text[])', [ids, now()]);
     },
     getProfile: (userId: string) => profileIn(sql, userId),
 

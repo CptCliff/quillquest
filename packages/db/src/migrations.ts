@@ -108,4 +108,32 @@ export const MIGRATIONS: Migration[] = [
       alter table suggestions enable row level security;
     `,
   },
+  {
+    // Async play (design plan 10): where to email people, how they want it, and a queue that survives a restart.
+    name: '0004_notifications',
+    sql: `
+      alter table profiles add column email text check (email is null or char_length(email) <= 254);
+      create table notification_prefs (
+        campaign_id text not null references campaigns (id) on delete cascade,
+        user_id text not null references profiles (user_id),
+        mode text not null check (mode in ('immediate', 'digest', 'off')),
+        primary key (campaign_id, user_id)
+      );
+      create table notification_queue (
+        id text primary key,
+        campaign_id text not null references campaigns (id) on delete cascade,
+        user_id text not null references profiles (user_id),
+        kind text not null,
+        text text not null,
+        link text not null,
+        dedupe_key text,
+        created_at timestamptz not null default now(),
+        sent_at timestamptz
+      );
+      create unique index notification_dedupe on notification_queue (campaign_id, user_id, dedupe_key) where dedupe_key is not null;
+      create index notification_pending on notification_queue (created_at) where sent_at is null;
+      alter table notification_prefs enable row level security;
+      alter table notification_queue enable row level security;
+    `,
+  },
 ];

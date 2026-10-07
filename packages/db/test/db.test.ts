@@ -196,7 +196,7 @@ describe('row-level security: deny by default', () => {
     `);
     await h.pg.exec('set role authenticated');
     try {
-      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents', 'gm_documents', 'suggestions']) {
+      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents', 'gm_documents', 'suggestions', 'notification_prefs', 'notification_queue']) {
         const { rows } = await h.pg.query(`select * from ${t}`);
         expect(rows, t).toEqual([]);
       }
@@ -263,6 +263,43 @@ describe('GM notes and the Claude suggestion log', () => {
     await fails(h.db.setSuggestionStatus(c.id, b.id, 'bogus' as never), 'BAD_INPUT');
     await fails(h.db.setSuggestionStatus(c.id, 'nope', 'used'), 'NOT_FOUND');
     await fails(h.db.setSuggestionStatus('other-campaign', a.id, 'used'), 'NOT_FOUND'); // a suggestion belongs to its campaign
+  });
+});
+
+describe('notifications: email, preferences and the queue', () => {
+  it('keeps the email from sign-in, refreshed each time, and ignores junk', async () => {
+    await h.db.ensureProfile('mailer', 'Mailer', null, 'mailer@example.com');
+    expect(await h.db.getEmail('mailer')).toBe('mailer@example.com');
+    await h.db.ensureProfile('mailer', 'Mailer', null, 'new@example.com');
+    expect(await h.db.getEmail('mailer')).toBe('new@example.com');
+    await h.db.ensureProfile('mailer', 'Mailer', null, 'not an email');
+    expect(await h.db.getEmail('mailer')).toBe('new@example.com');
+    await h.db.ensureProfile('nomail', 'No Mail');
+    expect(await h.db.getEmail('nomail')).toBeNull();
+    expect(await h.db.getEmail('ghost')).toBeNull();
+  });
+  it('preferences are per campaign and default to immediate', async () => {
+    const c = await h.db.createCampaign({ title: 'Prefs', gmUserId: 'gm' });
+    await h.db.ensureProfile('pat', 'Pat');
+    expect(await h.db.getNotifyMode(c.id, 'pat')).toBe('immediate');
+    await h.db.setNotifyMode(c.id, 'pat', 'digest');
+    await h.db.setNotifyMode(c.id, 'pat', 'off');
+    expect(await h.db.getNotifyMode(c.id, 'pat')).toBe('off');
+    await fails(h.db.setNotifyMode(c.id, 'pat', 'sometimes' as never), 'BAD_INPUT');
+    await fails(h.db.setNotifyMode('nope-nope', 'pat', 'off'), 'NOT_FOUND');
+  });
+  it('queues messages, lists the unsent ones oldest first, marks them sent, and keeps a dedupe key to one message', async () => {
+    const c = await h.db.createCampaign({ title: 'Queue', gmUserId: 'gm' });
+    await h.db.ensureProfile('pat', 'Pat');
+    const a = await h.db.queueNotification({ campaignId: c.id, userId: 'pat', kind: 'spotlight', text: 'Your turn', link: '/story/x?para=p1' });
+    h.clock.now = new Date(h.clock.now.getTime() + 1000);
+    const b = await h.db.queueNotification({ campaignId: c.id, userId: 'pat', kind: 'stall', text: 'Waiting', link: '/story/x?card=c1', dedupeKey: 'stall:c1' });
+    expect(a).not.toBeNull();
+    expect(await h.db.queueNotification({ campaignId: c.id, userId: 'pat', kind: 'stall', text: 'Waiting again', link: '/x', dedupeKey: 'stall:c1' })).toBeNull();
+    const pending = await h.db.pendingNotifications();
+    expect(pending.filter((n) => n.campaignId === c.id).map((n) => [n.kind, n.text, n.link])).toEqual([['spotlight', 'Your turn', '/story/x?para=p1'], ['stall', 'Waiting', '/story/x?card=c1']]);
+    await h.db.markNotificationsSent([a!.id]);
+    expect((await h.db.pendingNotifications()).filter((n) => n.campaignId === c.id).map((n) => n.id)).toEqual([b!.id]);
   });
 });
 
