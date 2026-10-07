@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { CONCESSION_KINDS, DANGER_RANKS, DIFFICULTY_RANKS, type Character, type ConcessionKind, type DiceView, type WoundLevel } from '@quillquest/rules';
 import { ApiFailure, type GameApi, type LedgerCard, type PromptInfo, type Preview } from '../lib/game-api';
@@ -117,13 +117,17 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [concession, setConcession] = useState<ConcessionKind>(CONCESSION_KINDS[0]);
   const [manual, setManual] = useState({ source: 'preparation', what: 'skill:1', reason: '' });
-  const [problem, setProblem] = useState<string | null>(null);
   const ranksChosen = !!card.difficulty && !!card.danger;
   /** Roll, Set and Discard say why on the card itself when the server refuses; the page banner is out of sight on a long card. */
-  const act = (fn: () => Promise<unknown>) => { setProblem(null); return run(async () => { try { await fn(); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Something went wrong'); throw e; } }); };
+  const act = (fn: () => Promise<unknown>) => { setProblem(null); return run(async () => { try { await enqueue(fn); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Something went wrong'); throw e; } }); };
   const key = JSON.stringify(card);
   useEffect(() => { api.preview(card.id).then(setPreview, () => setPreview(null)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const save = (patch: Parameters<GameApi['edit']>[1]) => run(() => api.edit(card.id, patch));
+  const [problem, setProblem] = useState<string | null>(null);
+  // Fields save when you tap out of them, so a tap straight on Roll or Set starts before the edit has landed. Edits and actions go through one queue.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = <T,>(fn: () => Promise<T>): Promise<T> => { const p = queue.current.then(fn); queue.current = p.catch(() => undefined); return p; };
+  // Saving a field must not mark the card busy: that would disable Roll in the middle of the very click that blurred the field.
+  const save = (patch: Parameters<GameApi['edit']>[1]) => { enqueue(() => api.edit(card.id, patch)).then(() => setProblem(null), (e) => setProblem(e instanceof ApiFailure ? e.message : 'That did not save. Try again.')); };
   const beliefOptions = [{ value: '', label: 'None' }, ...(sheet?.beliefs ?? []).map((b) => ({ value: b.id, label: `${b.isCore ? 'Core: ' : ''}${b.text}` }))];
   const others = Object.values(characters).filter((c) => c.id !== card.characterId);
 
@@ -190,9 +194,9 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
       {preview && preview.problems.length > 0 && <p className="muted" data-testid="problems">{preview.problems.join(' ')}</p>}
 
       <div className="actions">
-        {owner && card.speed === 'quick' && <button disabled={busy} data-testid="roll" onClick={() => act(() => api.roll(card.id))}>Roll</button>}
-        {gm && <button disabled={busy || !ranksChosen} data-testid="set" title={ranksChosen ? undefined : 'Choose a Difficulty and a Danger first'} onClick={() => act(() => api.set(card.id))}>Set</button>}
-        {owner && <button type="button" disabled={busy} data-testid="discard" onClick={() => act(() => api.discard(card.id))}>Discard this card</button>}
+        {owner && card.speed === 'quick' && <button disabled={busy} data-testid="roll" aria-label={`Roll ${card.skillName}`} onClick={() => act(() => api.roll(card.id))}>Roll</button>}
+        {gm && <button disabled={busy || !ranksChosen} data-testid="set" aria-label={`Set ${card.skillName}`} title={ranksChosen ? undefined : 'Choose a Difficulty and a Danger first'} onClick={() => act(() => api.set(card.id))}>Set</button>}
+        {(owner || gm) && <button type="button" disabled={busy} data-testid="discard" aria-label={`Discard ${card.skillName} card`} onClick={() => act(() => api.discard(card.id))}>Discard this card</button>}
         {owner && (
           <>
             <select aria-label="Concession" data-testid="concede-kind" value={concession} onChange={(e) => setConcession(e.target.value as ConcessionKind)}>{CONCESSION_KINDS.map((k) => <option key={k}>{k}</option>)}</select>
@@ -322,7 +326,7 @@ function PastRoll({ card, env, canRetcon }: { card: LedgerCard; env: Env; canRet
   );
 }
 
-function NewRoll({ env, character }: { env: Env; character: Character }) {
+function NewRoll({ env, character, hasDraft }: { env: Env; character: Character; hasDraft: boolean }) {
   const { run, busy } = useAct(env.onNotice);
   const [skill, setSkill] = useState(character.skills[0]?.name ?? '__other');
   const [other, setOther] = useState('');
@@ -337,7 +341,8 @@ function NewRoll({ env, character }: { env: Env; character: Character }) {
         </select>
       </label>
       {skill === '__other' && <input aria-label="Skill name" placeholder="What are you attempting?" value={other} onChange={(e) => setOther(e.target.value)} />}
-      <button disabled={busy || !name} data-testid="new-roll-open" title="Opens a new card in the Ledger; it does not roll anything yet" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>Open a roll card</button>
+      <button disabled={busy || !name || hasDraft} data-testid="new-roll-open" title="Opens a new card in the Ledger; it does not roll anything yet" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>Open a roll card</button>
+      {hasDraft && <span className="muted" data-testid="new-roll-hint">You already have an open card: finish it, or discard it, first.</span>}
       {problem && <span role="alert" className="form-error" data-testid="new-roll-problem">{problem}</span>}
     </div>
   );
@@ -349,7 +354,7 @@ export function Ledger({ cards, character, env }: { cards: LedgerCard[]; charact
   const lastQuick = [...past].reverse().find((c) => c.speed === 'quick');
   return (
     <section aria-label="Ledger" data-testid="ledger">
-      {character && env.me.role !== 'gm' && <NewRoll env={env} character={character} />}
+      {character && env.me.role !== 'gm' && <NewRoll env={env} character={character} hasDraft={active.some((c) => c.status === 'draft' && c.actorId === env.me.id)} />}
       {active.length === 0 && <p className="muted">No roll in progress. Write up to the moment of action, then open a card.</p>}
       {active.map((c) => <ActiveCard key={c.id} card={c} env={env} />)}
       {past.length > 0 && <h3>Past rolls</h3>}

@@ -271,3 +271,13 @@ describe('chapter offers over HTTP', () => {
     expect((await t.step(MIRA, 'chapter-offer', { chapter: 0, adapted: { skills: [], traits: [] } })).status).toBe(400);
   });
 });
+
+describe('plain messages for a missing field', () => {
+  it('says what to fill in, not the field name', async () => {
+    const t = await table();
+    const r = await t.step(MIRA, 'origin-post', {});
+    expect(r.status).toBe(400);
+    expect(r.json.error.message).toBe('Fill in a paragraph first');
+    expect((await t.step(MIRA, 'origin-picks', { connection: 'Wren' })).json.error.message).toBe('Fill in a Skill first');
+  });
+});

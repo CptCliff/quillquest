@@ -42,7 +42,7 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   `apps/sync/src/notify/` (batching, presence, preferences, deep links), a 30-second background job (mail, push windows, stalls), public `battles` map. `docs/m7-notes.md`.
 - M9 chapter library: done. `packages/rules/src/chapter-library.ts` (24 original templates, keyword matcher), `offerChapter`/`pickChapterGrants`/`objectToPick` in `creation-flow.ts`, steps `chapter-offer|pick|object`, adapt via the `grant` kind with `adapt: true`. A writer's own pick applies at once; anyone else can object. `docs/m9-notes.md`.
 - Interface design pass: done. `packages/layout` (the dock model), saved layouts (`layouts` table, `/layout` routes), design tokens and themes (`app/tokens.css`), the dock (`components/dock/`), and an axe-core accessibility audit in Playwright. `docs/m8-notes.md`.
-- Test counts: 25 story, 20 layout, 299 rules, 16 prompts, 31 db, 139 sync, 13 web, 36 Playwright.
+- Test counts: 25 story, 20 layout, 299 rules, 16 prompts, 31 db, 141 sync, 13 web, 37 Playwright (the dock drag test is occasionally flaky).
 - All seven milestones and the design pass are done. Next: playtest, real Supabase sign-in, and a real mail and model key.
 
 ## Gotchas

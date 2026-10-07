@@ -92,7 +92,7 @@ export function Creation(p: CreationProps) {
             submit={(v) => act('origin-post', { paragraphId: v.paragraphId })} />
         )}
         {st.origin.skill ? <p>Origin Skill: {st.origin.skill}. First Connection: {st.origin.connection}.</p> : (
-          <StepForm testId="origin-picks" fields={[{ key: 'skill', label: 'A Skill from your Origin (starts Trained)' }, { key: 'connection', label: 'A Connection from your Origin' }]} label="Save picks" run={run} busy={busy}
+          <StepForm testId="origin-picks" keep fields={[{ key: 'skill', label: 'A Skill from your Origin (starts Trained)' }, { key: 'connection', label: 'A Connection from your Origin' }]} label="Save picks" run={run} busy={busy}
             submit={(v) => act('origin-picks', { skill: v.skill, connection: v.connection })} />
         )}
 
@@ -116,7 +116,7 @@ export function Creation(p: CreationProps) {
         <Crossings st={st} mine={mine} others={others} creation={creation} crossings={crossings} characters={characters} paraOptions={paraOptions} run={run} busy={busy} act={act} />
 
         <h3>4 · Capital</h3>
-        <StepForm testId="capital" label="Save Capital" run={run} busy={busy}
+        <StepForm testId="capital" keep label="Save Capital" run={run} busy={busy}
           fields={[
             ...st.standingPrompts.map((c): FieldSpec => ({ key: `standing:${c}`, label: `How is ${c} seen? (you named it)`, kind: 'select', options: STANDING, initial: mine.standing[c] ?? 'Unknown' })),
             ...[1, 2, 3].flatMap((i): FieldSpec[] => [{ key: `pn${i}`, label: `Possession ${i} (optional)` }, { key: `ps${i}`, label: `Possession ${i}: its story, in a line` }]),
@@ -128,7 +128,7 @@ export function Creation(p: CreationProps) {
         {mine.possessions.length > 0 && <p>Possessions: {mine.possessions.map((x) => x.name).join(' · ')}</p>}
 
         <h3>5 · Beliefs and Instincts</h3>
-        <StepForm testId="beliefs" label="Save Beliefs" run={run} busy={busy}
+        <StepForm testId="beliefs" keep label="Save Beliefs" run={run} busy={busy}
           secondary={{ label: 'Check my Beliefs with Claude', testId: 'check', onClick: async (v) => {
             const out: string[] = [];
             for (const kind of ['objective', 'relationship', 'worldview']) {
@@ -145,7 +145,7 @@ export function Creation(p: CreationProps) {
           ]}
           submit={(v) => act('beliefs', { beliefs: ['objective', 'relationship', 'worldview'].map((kind) => ({ kind, text: v[kind] })) })} />
         {beliefNotes.length > 0 && <ul data-testid="belief-check-result">{beliefNotes.map((n) => <li key={n}>{n}</li>)}</ul>}
-        <StepForm testId="instincts" label="Save Instincts" run={run} busy={busy}
+        <StepForm testId="instincts" keep label="Save Instincts" run={run} busy={busy}
           fields={[0, 1, 2].map((i): FieldSpec => ({ key: `i${i}`, label: `Instinct ${i + 1}`, initial: mine.instincts[i]?.text }))}
           submit={(v) => act('instincts', { instincts: [v.i0, v.i1, v.i2] })} />
         {st.chapters.some((c) => c.endsBadly && c.testedBelief) && !st.burdenChosen && mine.beliefs.length === 3 && (
@@ -156,7 +156,7 @@ export function Creation(p: CreationProps) {
 
         <h3>6 · The hook</h3>
         {mine.threads.length === 0 ? <p className="muted">You have no Threads yet; a chapter or a crossing gives you one.</p> : (
-          <StepForm testId="hook" label="Start play with this Thread" run={run} busy={busy}
+          <StepForm testId="hook" keep label="Start play with this Thread" run={run} busy={busy}
             fields={[{ key: 'threadId', label: 'The unfinished business your first scene follows', kind: 'select', options: mine.threads.map((t) => ({ value: t.id, label: t.text })), initial: st.hookThreadId ?? undefined }]}
             submit={(v) => act('hook', { threadId: v.threadId })} />
         )}
@@ -222,9 +222,10 @@ function ChapterOffer({ ch, st, run, busy, act, game, characterId }: { character
           onClick={() => run(async () => { const draft = (await game.ask('grant', { characterId, chapter: n, adapt: true })).suggestion.draft as { skills: string[]; traits: string[] }; await act('chapter-offer', { chapter: n, adapted: draft }); })}>Adapt it to my chapter with Claude</button>
       )}
       {offer.tier !== 'none' && <p className="muted">Ideas for what the chapter leaves you: Connection, {offer.outputs.connection[0] ?? '—'}; Resource, {offer.outputs.resource[0] ?? '—'}; Thread, {offer.outputs.thread[0] ?? '—'}.</p>}
-      <StepForm testId={`pick-${n}`} label="Take these" run={run} busy={busy}
+      {ch.skill.reopened && !ch.skill.applied && <p className="muted" data-testid={`offer-objected-${n}`}>The others objected to your Skill pick, so they are proposing one for chapter {n + 1} now.</p>}
+      <StepForm testId={`pick-${n}`} label="Take my picks" run={run} busy={busy}
         fields={[
-          ...(ch.skill.applied ? [] : [{ key: 'skill', label: `Skill for chapter ${n + 1}`, kind: 'select' as const, options: skillOptions }, { key: 'skillOwn', label: `Or a Skill in your own words (chapter ${n + 1})` }]),
+          ...(ch.skill.applied || ch.skill.reopened ? [] : [{ key: 'skill', label: `Skill for chapter ${n + 1}`, kind: 'select' as const, options: skillOptions }, { key: 'skillOwn', label: `Or a Skill in your own words (chapter ${n + 1})` }]),
           ...(ch.trait.applied ? [] : [{ key: 'trait', label: `${ch.endsBadly ? 'Harmful Trait' : 'Trait'} for chapter ${n + 1}`, kind: 'select' as const, options: traitOptions }, { key: 'traitOwn', label: `Or a ${ch.endsBadly ? 'harmful ' : ''}Trait in your own words (chapter ${n + 1})` }]),
         ]}
         submit={(v) => {
@@ -273,7 +274,7 @@ function Crossings({ st, mine, others, creation, crossings, characters, paraOpti
           <label className="field"><span>Cross paths with</span>
             <select data-testid="crossing-with" value={to || others[0]!.id} onChange={(e) => setTo(e.target.value)}>{others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           </label>
-          <StepForm testId="crossing-form" label="Propose the crossing" run={run} busy={busy} disabled={!theirs}
+          <StepForm testId="crossing-form" done={`Proposed. Waiting for ${target?.name ?? 'them'} to confirm.`} label="Propose the crossing" run={run} busy={busy} disabled={!theirs}
             fields={[
               { key: 'fromChapter', label: 'In your chapter', kind: 'select', options: range(st.chapters.length) },
               { key: 'toChapter', label: 'In theirs', kind: 'select', options: range(theirs) },

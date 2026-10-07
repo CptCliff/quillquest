@@ -175,6 +175,7 @@ export class GameService {
     return this.mutate(campaign, actor, async (s) => {
       if (actor.role === 'gm') throw new GameError(403, 'GM_HAS_NO_CHARACTER', 'Cards are opened by the acting player');
       const sheet = this.sheet(s, s.characterOf[actor.id]!);
+      if (Object.values(s.cards).some((c) => c.actorId === actor.id && c.status === 'draft')) throw new GameError(409, 'DRAFT_OPEN', 'You already have an open card: finish it, or discard it, first');
       if (input.anchorParagraphId) {
         const story = await this.d.docs.story(campaign);
         if (!story.some((p) => p.paragraphId === input.anchorParagraphId)) throw new GameError(400, 'NO_SUCH_PARAGRAPH', 'That paragraph is not in the story');

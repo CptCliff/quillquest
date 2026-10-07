@@ -11,7 +11,13 @@ type Body = Record<string, unknown>;
 export interface CreationCtx { story: StoryDoc; now: string }
 
 const bad = (m: string): never => { throw new GameError(400, 'BAD_INPUT', m); };
-const s = (b: Body, k: string): string => (typeof b[k] === 'string' && (b[k] as string).length ? (b[k] as string) : bad(`${k} is required`));
+/** A missing field in plain words for the person at the table ("paragraphId" is "the paragraph"). */
+const WORDS: Record<string, string> = {
+  paragraphId: 'a paragraph', summary: 'a one-line summary', text: 'a line of text', skill: 'a Skill', trait: 'a Trait', connection: 'a Connection',
+  fromConnection: 'your Connection to them', toConnection: 'their Connection to you', toCharacterId: 'who to cross paths with', threadId: 'a Thread', beliefId: 'a Belief', name: 'a name', reason: 'a reason',
+};
+const missing = (k: string): string => `Fill in ${WORDS[k] ?? k.replace(/Id$/, '').replace(/([A-Z])/g, ' $1').toLowerCase()} first`;
+const s = (b: Body, k: string): string => (typeof b[k] === 'string' && (b[k] as string).length ? (b[k] as string) : bad(missing(k)));
 const os = (b: Body, k: string): string | undefined => (typeof b[k] === 'string' ? (b[k] as string) : undefined);
 const n = (b: Body, k: string): number => (Number.isInteger(b[k]) ? (b[k] as number) : bad(`${k} must be a whole number`));
 const flag = (b: Body, k: string): boolean => b[k] === true;

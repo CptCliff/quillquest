@@ -116,7 +116,8 @@ export function Director({ game, characters, cards, convictionLog, overrides, me
             <select aria-label="Danger" data-testid="pending-danger" value={c.danger ?? ''} onChange={(e) => run(() => game.edit(c.id, { danger: e.target.value || null }))}>
               <option value="">Danger…</option>{DANGER_RANKS.map((r) => <option key={r}>{r}</option>)}
             </select>
-            {c.status === 'draft' && <button type="button" data-testid="pending-set" disabled={busy} onClick={() => run(() => game.set(c.id))}>Set</button>}
+            {c.status === 'draft' && <button type="button" data-testid="pending-set" disabled={busy || !c.difficulty || !c.danger} title={c.difficulty && c.danger ? undefined : 'Choose a Difficulty and a Danger first'} onClick={() => run(() => game.set(c.id))}>Set</button>}
+            {c.status === 'draft' && <button type="button" data-testid="pending-discard" disabled={busy} aria-label={`Discard ${nameOf(c.characterId)}'s ${c.skillName} card`} onClick={() => run(() => game.discard(c.id))}>Discard</button>}
             <button type="button" data-testid="pending-sharpen" disabled={busy} onClick={() => ask('danger', { cardId: c.id }, `Sharper Dangers for ${nameOf(c.characterId)}'s ${c.skillName}`)}>Sharpen Danger</button>
           </div>
         </div>

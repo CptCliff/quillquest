@@ -19,3 +19,10 @@ Why: the first four-agent playtest never got a player through creation. Every Li
 - Forms that save a sheet field come back showing the saved values; "Still to do" re-reads after every action.
 - Roll card: Set needs a Difficulty and a Danger, Roll/Set/Discard errors show on the card, an unset draft can be discarded (`DELETE /cards/:id`, owner or GM); the published `ledger` map now drops cards the game no longer has.
 - Battle dice reveal is words, not JSON. On phones the Notes tab says "create your character" while creating.
+
+## Round-3 playtest fixes
+- The silent Roll no-op was a race: saving a field on blur marked the card busy, which disabled Roll in the middle of the click that blurred the field. Field saves no longer set busy, and edits and actions share one queue per card.
+- Save-style forms (`keep`) keep what was typed; the crossing form says who it is waiting for; "Take my picks"; the self-pick form is hidden while the others are proposing.
+- One open draft per player (`DRAFT_OPEN`); the GM can discard any draft (Ledger and Director); Director Set needs a Difficulty and a Danger.
+- Plain "Fill in a paragraph first" instead of "paragraphId is required"; theme button no longer squeezed out of the header.
+- Not done: glossary for jargon, a GM "Session zero" tab (it sits at the bottom of Director), matcher by role rather than keyword, duplicate pending crossings, whether rolls should be allowed before Begin play.

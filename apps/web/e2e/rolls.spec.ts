@@ -192,3 +192,31 @@ test('the GM can retcon a quick roll until a later post builds on it', async ({ 
   await expect(gm.getByTestId('notice')).toContainText('builds on this outcome');
   await locked(ilse, 0);
 });
+
+test('clicking Roll straight after typing the last field still rolls; a second card cannot be opened over an open draft, which can be discarded', async ({ browser }) => {
+  const t = await createTable(['ilse', 'sella']);
+  const ilse = await join(browser, t, 'ilse');
+  const sella = await join(browser, t, 'sella');
+  await write(ilse, 'I reach the wall and start to climb.', true);
+  await ilse.getByTestId('new-roll-open').click();
+  await expect(card(sella)).toBeVisible();
+  // One draft at a time: the button waits, and says why.
+  await expect(ilse.getByTestId('new-roll-open')).toBeDisabled();
+  await expect(ilse.getByTestId('new-roll-hint')).toContainText('already have an open card');
+  // A mistaken draft is dropped for everyone.
+  await card(ilse).getByTestId('discard').click();
+  await expect(ilse.getByTestId('card')).toHaveCount(0);
+  await expect(sella.getByTestId('card')).toHaveCount(0);
+
+  await ilse.getByTestId('new-roll-open').click();
+  const c = card(ilse);
+  await commit(c.getByTestId('want'), 'Climb the wall');
+  await commit(c.getByTestId('risk'), 'I twist an ankle');
+  await c.getByTestId('danger-kind').selectOption('wound');
+  await c.getByTestId('difficulty').selectOption('Demanding');
+  await c.getByTestId('danger').selectOption('Serious');
+  await c.getByTestId('danger-text').fill('I twist an ankle'); // not blurred: the click on Roll does that
+  await queueDice(t, [5, 3, 6]);
+  await c.getByTestId('roll').click();
+  await expect(card(ilse).getByTestId('outcome')).toHaveText('Success, with the cost');
+});

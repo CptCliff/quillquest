@@ -322,11 +322,12 @@ describe('who may do what', () => {
 });
 
 describe('concurrency', () => {
-  it('serializes mutations per campaign: parallel cards get distinct ids and all survive', async () => {
+  it('serializes mutations per campaign: of five parallel cards for one player exactly one opens, and the rest see it', async () => {
     const t = setup();
-    const made = await Promise.all([1, 2, 3, 4, 5].map(() => t.svc.createCard(C, ILSE, { skillName: 'Climb' })));
-    expect(new Set(made.map((c) => c.id)).size).toBe(5);
-    expect(Object.keys(t.docs.published!.ledger)).toHaveLength(5);
+    const made = await Promise.allSettled([1, 2, 3, 4, 5].map(() => t.svc.createCard(C, ILSE, { skillName: 'Climb' })));
+    expect(made.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    for (const r of made) if (r.status === 'rejected') expect(String(r.reason?.code ?? r.reason)).toContain('DRAFT_OPEN');
+    expect(Object.keys(t.docs.published!.ledger)).toHaveLength(1);
   });
   it('a failed mutation does not block the next', async () => {
     const t = setup();

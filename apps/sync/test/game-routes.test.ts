@@ -159,3 +159,15 @@ describe('discarding a draft card', () => {
     expect((await t.call(ILSE, 'DELETE', `/cards/${card.id}`)).status).toBe(404);
   });
 });
+
+describe('one open draft per player', () => {
+  it('a second card is refused until the first is set or discarded', async () => {
+    const t = await table();
+    const first = (await t.call(ILSE, 'POST', '/cards', { skillName: 'Climb', anchorParagraphId: 'p1' })).json.card;
+    const again = await t.call(ILSE, 'POST', '/cards', { skillName: 'Climb', anchorParagraphId: 'p2' });
+    expect(again.status).toBe(409);
+    expect(again.json.error.code).toBe('DRAFT_OPEN');
+    expect((await t.call(GM, 'DELETE', `/cards/${first.id}`)).status).toBe(200); // the GM can tidy a stray draft
+    expect((await t.call(ILSE, 'POST', '/cards', { skillName: 'Climb', anchorParagraphId: 'p2' })).status).toBe(200);
+  });
+});

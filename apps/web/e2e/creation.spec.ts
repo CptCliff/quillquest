@@ -45,6 +45,7 @@ async function finishSheet(page: Page, name: string, burden = false) {
   await submit(page, 'beliefs');
   for (const i of [0, 1, 2]) await creation(page).getByTestId(`instincts-i${i}`).fill(`Instinct ${i}`);
   await submit(page, 'instincts');
+  await expect(creation(page).getByTestId('instincts-i0')).toHaveValue('Instinct 0'); // what was saved stays on screen
   if (burden) {
     await expect(creation(page).getByTestId('burden-beliefId')).toBeVisible();
     await creation(page).getByTestId('burden-name').fill('Doubts the oath');

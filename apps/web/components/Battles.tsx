@@ -69,7 +69,7 @@ function BattleCard({ b, characters, me, game, run, busy }: { b: PublicBattle; c
 
       {/* the lead's main card */}
       {isLead && b.status === 'declaring' && (
-        <StepForm testId={`battle-${b.id}-lead`} title="Your main card" label="Save" run={run} busy={busy}
+        <StepForm keep testId={`battle-${b.id}-lead`} title="Your main card" label="Save" run={run} busy={busy}
           fields={[
             { key: 'want', label: 'Want: what you want, and how you go about it' },
             { key: 'risk', label: 'Risk: what failure feels like' },
@@ -81,7 +81,7 @@ function BattleCard({ b, characters, me, game, run, busy }: { b: PublicBattle; c
       {/* a contributor's card */}
       {mine && b.status === 'declaring' && mine.status !== 'withdrawn' && mine.status !== 'skipped' && (
         <>
-          <StepForm testId={`battle-${b.id}-declare`} title={mine.status === 'declared' ? 'Your contribution (declared; change it if you like)' : 'Declare your contribution'} label="Declare" run={run} busy={busy}
+          <StepForm keep testId={`battle-${b.id}-declare`} title={mine.status === 'declared' ? 'Your contribution (declared; change it if you like)' : 'Declare your contribution'} label="Declare" run={run} busy={busy}
             fields={[
               { key: 'line', label: 'What your character does' },
               { key: 'type', label: 'It shifts', kind: 'select', options: [{ value: 'press', label: 'Press: the lead\'s Skill up' }, { value: 'open', label: 'Open: the Difficulty down' }, { value: 'cover', label: 'Cover: someone\'s Danger down' }] },
@@ -127,7 +127,7 @@ function BattleCard({ b, characters, me, game, run, busy }: { b: PublicBattle; c
 
       {/* beats */}
       {rolled && myCharacter && !gm && b.status !== 'written' && (
-        <StepForm testId={`battle-${b.id}-beat`} title={myBeatDone ? 'Your beat (written; rewrite it if you like)' : 'Write your beat: one to three sentences'} label="Save beat" run={run} busy={busy}
+        <StepForm keep testId={`battle-${b.id}-beat`} title={myBeatDone ? 'Your beat (written; rewrite it if you like)' : 'Write your beat: one to three sentences'} label="Save beat" run={run} busy={busy}
           fields={[
             { key: 'text', label: 'Your beat' },
             ...(landed(myCharacter) ? [

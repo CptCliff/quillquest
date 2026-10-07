@@ -14,5 +14,5 @@ export function ThemeToggle() {
     setChoice(c);
     try { if (c === 'system') { localStorage.removeItem('qq.theme'); delete document.documentElement.dataset.theme; } else { localStorage.setItem('qq.theme', c); document.documentElement.dataset.theme = c; } } catch { /* the choice just will not be remembered */ }
   };
-  return <button type="button" className="quiet" data-testid="theme-toggle" aria-label={`${LABEL[choice]}. Activate to change.`} title={LABEL[choice]} onClick={() => apply(NEXT[choice])}>{ICON[choice]}</button>;
+  return <button type="button" className="quiet theme-toggle" data-testid="theme-toggle" aria-label={`${LABEL[choice]}. Activate to change.`} title={LABEL[choice]} onClick={() => apply(NEXT[choice])}>{ICON[choice]}</button>;
 }
