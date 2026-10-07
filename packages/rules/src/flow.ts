@@ -434,7 +434,7 @@ export function diceView(r: Roll): DiceView {
 export interface PublicCard {
   id: string; status: CardStatus; speed: CardSpeed; actorId: string; characterId: string; anchorParagraphId: string | null;
   skillName: string; skillRank: SkillRank; want: string; risk: string; onTheLine: string | null; backingBeliefId: string | null;
-  dangerTargetId: string | null; dangerText: string; dangerKind: DangerKind; threat: ThreatKind | null;
+  dangerTargetId: string | null; dangerText: string; dangerKind: DangerKind; declaredMortal: boolean; threat: ThreatKind | null;
   difficulty: DifficultyRank | null; danger: DangerRank | null;
   shiftKeys: string[]; manualShifts: ManualShift[]; shifts: { ladder: Shift['ladder']; delta: number; reason: string }[];
   /** Words only. Numeric chances never leave the server. */
@@ -455,7 +455,7 @@ export function toPublicCard(card: PromptCard): PublicCard {
     id: card.id, status: card.status, speed: card.speed, actorId: card.actorId, characterId: card.characterId, anchorParagraphId: card.anchorParagraphId,
     skillName: card.skillName, skillRank: card.set ? card.set.skill : card.skillRank, want: card.want, risk: card.risk,
     onTheLine: card.onTheLine, backingBeliefId: card.backingBeliefId, dangerTargetId: card.dangerTargetId, dangerText: card.dangerText,
-    dangerKind: card.dangerKind, threat: card.threat,
+    dangerKind: card.dangerKind, declaredMortal: card.declaredMortal, threat: card.threat,
     difficulty: card.set ? card.set.difficulty : card.difficulty, danger: card.set ? card.set.danger : card.danger,
     shiftKeys: card.shiftKeys, manualShifts: card.manualShifts,
     shifts: card.appliedShifts.map((s) => ({ ladder: s.ladder, delta: s.delta, reason: s.reason })),

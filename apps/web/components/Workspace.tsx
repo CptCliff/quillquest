@@ -4,12 +4,12 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import type { Editor } from '@tiptap/core';
 import { StoryEditor, type Me } from './StoryEditor';
-import { DevLockTools, SuggestionsPanel } from './SuggestionsPanel';
+import { NotesPane } from './NotesPane';
 
 const REJECTED_PREFIX = 'rejected:';
 const SPLIT_KEY = 'qq.split';
 
-interface Connection { doc: Y.Doc; provider: HocuspocusProvider; me: Me }
+interface Connection { doc: Y.Doc; provider: HocuspocusProvider; me: Me; token: string }
 
 function loadSplit(): number {
   try {
@@ -55,7 +55,7 @@ export function Workspace({ campaign, userId }: { campaign: string; userId: stri
       const track = () => alive && setPeers([...(provider!.awareness?.getStates().entries() ?? [])].flatMap(([key, s]) => (s.user?.name ? [{ key, name: s.user.name, color: s.user.color }] : [])));
       provider.awareness?.on('change', track);
       track();
-      if (alive) setConn({ doc, provider, me: identity });
+      if (alive) setConn({ doc, provider, me: identity, token });
     })();
     return () => { alive = false; provider?.destroy(); doc.destroy(); setConn(null); setEditor(null); };
   }, [campaign, userId, epoch]);
@@ -103,9 +103,7 @@ export function Workspace({ campaign, userId }: { campaign: string; userId: stri
         <div className="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" data-testid="divider"
           onPointerDown={(e) => { dragging.current = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }} />
         <section className="notes-pane" aria-label="Notes pane">
-          <p className="muted">Ledger, Codex and Roster arrive in later milestones.</p>
-          {editor && conn && <SuggestionsPanel editor={editor} userId={conn.me.id} />}
-          {editor && conn?.me.role === 'gm' && <DevLockTools editor={editor} />}
+          {conn && <NotesPane key={`${conn.me.id}-${epoch}`} doc={conn.doc} me={conn.me} token={conn.token} campaign={campaign} editor={editor} onNotice={setNotice} />}
         </section>
       </main>
     </div>

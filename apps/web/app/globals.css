@@ -54,3 +54,35 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   main[data-tab='story'] .notes-pane, main[data-tab='notes'] .story-pane { display: none; }
   .story-pane, .notes-pane { height: 100%; }
 }
+
+/* Notes pane tabs, Ledger and Roster */
+.note-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.note-tabs button[aria-selected='true'] { border-color: var(--fg); font-weight: 600; }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.card header { margin-bottom: 8px; }
+.card.past { padding: 8px 12px; }
+.badge { font-size: 11px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.field { display: grid; gap: 2px; margin-bottom: 8px; }
+.field span { font-size: 12px; color: var(--muted); }
+.field input, .field textarea, .field select, .row input, .row select, .new-roll select, .new-roll input { font: inherit; font-size: 14px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); width: 100%; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.row input, .row select { width: auto; flex: 1 1 110px; }
+.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
+.chips { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.chips legend, .manual legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.chips button[aria-pressed='true'] { background: var(--ins-bg); color: var(--ins-fg); border-color: var(--ins-fg); }
+.manual { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; }
+.chip-static { display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 1px 4px 1px 10px; margin: 0 4px 4px 0; font-size: 13px; }
+.chip-static button { border: none; background: none; padding: 0 6px; }
+.summary { font-size: 14px; margin: 6px 0; }
+.shifts { margin: 4px 0; padding-left: 18px; }
+.outcome { font-weight: 600; margin: 8px 0; }
+.prompt { border-left: 3px solid var(--fg); padding-left: 10px; margin: 8px 0; }
+.prompt p { margin: 4px 0; }
+.dice { font: 13px/1.5 ui-monospace, monospace; background: var(--panel); border: 1px dashed var(--line); border-radius: 6px; padding: 8px; margin-top: 8px; }
+.written-form { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 8px; }
+.new-roll { display: grid; gap: 8px; margin-bottom: 14px; }
+.sheet { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--bg); }
+.sheet h3 { margin: 0 0 6px; }
+.sheet ul { margin: 2px 0; padding-left: 18px; }
+.burden { display: grid; gap: 4px; padding: 4px 0; }

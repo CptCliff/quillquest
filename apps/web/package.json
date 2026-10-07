@@ -28,7 +28,8 @@
     "@tiptap/extension-document": "3.31.4",
     "@tiptap/extension-paragraph": "3.31.4",
     "@tiptap/extension-text": "3.31.4",
-    "@quillquest/sync": "workspace:*"
+    "@quillquest/sync": "workspace:*",
+    "@quillquest/rules": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

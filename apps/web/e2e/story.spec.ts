@@ -100,45 +100,14 @@ test('suggesting a deletion marks the text without removing it', async ({ browse
   expect(await textOf(ilse, 0)).toBe('I climb slowly.');
 });
 
-test('locked prose refuses edits from everyone, and the GM can retcon it', async ({ browser }) => {
+test('only the GM sees the Director tab, and the GM opens no cards', async ({ browser }) => {
   const t = newTable();
   const ilse = await join(browser, t, 'ilse');
-  const sella = await join(browser, t, 'sella');
   const gm = await join(browser, t, 'gm1');
-  await paragraphs(ilse).first().click();
-  await ilse.keyboard.type('The roll is written.');
-  await expect(paragraphs(gm).first()).toContainText('The roll is written.');
-
-  await paragraphs(gm).first().click();
-  await gm.getByTestId('lock-through').click();
-  for (const page of [ilse, sella, gm]) await expect(paragraphs(page).first()).toHaveClass(/is-locked/);
-
-  // The author is refused, with a reason, and the text does not change.
-  await typeIn(ilse, 0, ' Tampered.');
-  await expect(ilse.getByTestId('notice')).toContainText('locked');
-  expect(await textOf(ilse, 0)).toBe('The roll is written.');
-  await expect(paragraphs(gm).first()).not.toContainText('Tampered');
-
-  // Someone else cannot even suggest on it.
-  await typeIn(sella, 0, ' Sneaky.');
-  await expect(sella.getByTestId('notice')).toContainText('locked');
-  await expect(sella.locator('.story ins')).toHaveCount(0);
-
-  // A new paragraph after the locked run is fine.
-  await sella.getByTestId('new-post').click();
-  await sella.keyboard.type('The story goes on.');
-  await expect(paragraphs(ilse)).toHaveCount(2);
-
-  // Retcon: GM unlocks the last locked paragraph, then the author may edit again.
-  await gm.getByTestId('unlock-last').click();
-  await expect(paragraphs(ilse).first()).not.toHaveClass(/is-locked/);
-  await typeIn(ilse, 0, ' Revised.');
-  await expect(paragraphs(gm).first()).toContainText('Revised.');
-});
-
-test('a player cannot see GM tools, and cannot lock', async ({ browser }) => {
-  const ilse = await join(browser, newTable(), 'ilse');
-  await expect(ilse.getByTestId('gm-tools')).toHaveCount(0);
+  await expect(ilse.getByTestId('tab-director')).toHaveCount(0);
+  await expect(gm.getByTestId('tab-director')).toBeVisible();
+  await expect(ilse.getByTestId('new-roll')).toBeVisible();
+  await expect(gm.getByTestId('new-roll')).toHaveCount(0);
 });
 
 test('the panes resize, remember their width, and stack as tabs on a phone', async ({ browser }) => {

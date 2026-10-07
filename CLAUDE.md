@@ -22,13 +22,17 @@ pnpm e2e         # Playwright, two real browsers; starts sync + web itself
 ```
 
 ## Status
-- M1 rules engine: done (`packages/rules`, 113 tests). Open rule questions in `docs/m1-notes.md`.
-- M2 live editor: done. `packages/story` is the edit policy (shared by browser and server), `apps/sync` is the Hocuspocus
-  server that enforces it on every update, `apps/web` is the Next + TipTap + Yjs workspace. 26 + 14 unit/integration tests,
-  6 Playwright tests. Decisions, measurements and unverified gaps in `docs/m2-notes.md`.
-- Next: M3 (rolls). The lock trigger there is the real caller of `lockThrough`; the dev lock buttons go away.
+- M1 rules engine: done (`packages/rules`). Open rule questions in `docs/m1-notes.md`.
+- M2 live editor: done (`packages/story` edit policy, `apps/sync` enforcement, `apps/web` editor). `docs/m2-notes.md`.
+- M3 rolls: done. The card lifecycle is `packages/rules/src/flow.ts`; the server rolls the dice and keeps the records
+  (`apps/sync/src/game`); the browser reads a dice-free projection from the server-written `ledger` and `characters` Yjs maps.
+  Locks are server-only. 25 story + 165 rules + 45 sync tests, 9 Playwright tests. Decisions, rule questions and gaps in
+  `docs/m3-notes.md`.
+- Next: M4 (accounts, Roster, info cards, Skill chips). It replaces the dev token and the seeded dev characters.
 
 ## Gotchas
-- Dev only: identity is a signed token from `/api/dev-token`; M4 replaces it.
+- Dev only: identity is a signed token from `/api/dev-token`; M4 replaces it. Characters are seeded (`apps/sync/src/game/dev-characters.ts`).
+- Dice are drawn on the server only. Never put dice, numeric odds or a roll's internals in the `ledger` map or a non-GM response; tests scan for it.
+- The e2e dice route (`/api/dev/campaigns/:id/dice`) only mounts with `QUILLQUEST_DEV_DICE=1`.
 - pnpm enforces a minimum release age. Don't exclude a package from it to pull in a brand-new release; pin an older one.
 - Playwright runs the preinstalled Chromium (`/opt/pw-browsers`); don't run `playwright install`.

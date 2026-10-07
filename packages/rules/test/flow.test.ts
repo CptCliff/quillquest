@@ -324,6 +324,10 @@ describe('public view: dice stay hidden until revealed', () => {
     for (const key of ['skillDie', 'backingDie', 'difficultyDie', 'kept', 'hits', 'total']) expect(s).not.toContain(`"${key}"`);
     expect(p.dice).toBeNull();
   });
+  it('declaring a Danger Mortal is a public fact, set at Set', () => {
+    expect(toPublicCard({ ...filled({ danger: 'Grave', declaredMortal: true }) }).declaredMortal).toBe(true);
+    expect(toPublicCard(filled()).declaredMortal).toBe(false);
+  });
   it('reveal publishes the dice view', () => {
     const p = toPublicCard({ ...rolled(), revealed: true });
     expect(p.dice).toMatchObject({ skill: { sides: 8, value: 5 }, difficulty: { sides: 8, value: 3 }, danger: { sides: 8, value: 6 }, kept: 5 });

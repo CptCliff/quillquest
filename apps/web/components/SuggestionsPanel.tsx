@@ -2,10 +2,9 @@
 import type { Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { applySuggestion, revertSuggestion } from '@handlewithcare/prosemirror-suggest-changes';
-import { authorOfSuggestion, lockThrough } from '@quillquest/story';
+import { authorOfSuggestion } from '@quillquest/story';
 import { DIRECT } from '../extensions/story-guard';
 import { nameFor } from '../lib/dev-users';
-import { snapshot } from '../lib/story-doc';
 
 interface Suggestion { id: string; inserted: string; deleted: string; paragraphAuthor: string; paragraphId: string }
 
@@ -56,36 +55,6 @@ export function SuggestionsPanel({ editor, userId }: { editor: Editor; userId: s
           );
         })}
       </ul>
-    </section>
-  );
-}
-
-/** M2 stand-in for the roll flow (M3 locks prose when an outcome is written): the GM can lock and retcon by hand. */
-export function DevLockTools({ editor }: { editor: Editor }) {
-  const dispatchLocked = (ids: string[], locked: boolean) => {
-    const { state, view } = editor;
-    const tr = state.tr;
-    state.doc.forEach((node, offset) => { if (ids.includes(node.attrs.paragraphId)) tr.setNodeAttribute(offset, 'locked', locked); });
-    view.dispatch(tr.setMeta(DIRECT, true));
-  };
-  const lockHere = () => {
-    const here = editor.state.selection.$from;
-    if (here.depth < 1) return;
-    dispatchLocked(lockThrough(snapshot(editor.state.doc), here.node(1).attrs.paragraphId), true);
-  };
-  const unlockLast = () => {
-    const locked = snapshot(editor.state.doc).filter((p) => p.locked);
-    const last = locked.at(-1);
-    if (last) dispatchLocked([last.paragraphId], false);
-  };
-  return (
-    <section aria-label="GM tools" data-testid="gm-tools">
-      <h3>GM tools (dev)</h3>
-      <p className="muted">Until rolls exist (M3), lock prose by hand. Unlocking is a retcon and is logged.</p>
-      <div className="actions">
-        <button data-testid="lock-through" onClick={lockHere}>Lock through this paragraph</button>
-        <button data-testid="unlock-last" onClick={unlockLast}>Unlock last locked</button>
-      </div>
     </section>
   );
 }
