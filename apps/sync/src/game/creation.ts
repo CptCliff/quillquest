@@ -1,5 +1,5 @@
 import {
-  acceptProposal, addWorldFact, beginPlay, chooseHook, chooseOutput, confirmCrossing, declineCrossing, finishCreation, gmResolveGrant, overrideCheck,
+  acceptProposal, addWorldFact, objectToPick, offerChapter, pickChapterGrants, beginPlay, chooseHook, chooseOutput, confirmCrossing, declineCrossing, finishCreation, gmResolveGrant, overrideCheck,
   pickOrigin, postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, withdrawVote, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact,
   startingBurden, swapGrant, type ChapterOutput, type CreationActor, type CreationWorld,
 } from '@quillquest/rules';
@@ -36,6 +36,9 @@ function output(b: Body): ChapterOutput {
   return bad('output is a connection, a thread, or a resource that raises wealth or network');
 }
 
+const OBJECT_CHAR = '￼';
+const proseOf = (p: StoryDoc[number]) => p.cells.map((c) => c.ch).filter((c) => c !== OBJECT_CHAR).join('');
+
 type Handler = (w: CreationWorld, a: CreationActor, b: Body, ctx: CreationCtx, who: Identity) => CreationWorld;
 
 /** Creation actions that name a paragraph of the story. */
@@ -52,6 +55,17 @@ export const ACTIONS: Record<string, Handler> = {
   accept: (w, a, b) => acceptProposal(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b), proposalId: s(b, 'proposalId') }),
   withdraw: (w, a, b) => withdrawVote(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b) }),
   'gm-resolve': (w, a, b) => gmResolveGrant(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b), proposalId: os(b, 'proposalId'), value: os(b, 'value') }),
+  'chapter-offer': (w, a, b, c, who) => {
+    const chapter = n(b, 'chapter');
+    const mine = Object.values(w.characters).find((x) => x.ownerId === who.id && !x.left);
+    const para = mine ? c.story.find((x) => x.paragraphId === w.creation[mine.id]?.chapters[chapter]?.paragraphId) : undefined;
+    const adapted = b.adapted === undefined ? undefined : { skills: list(obj(b.adapted, 'adapted'), 'skills').map(String), traits: list(obj(b.adapted, 'adapted'), 'traits').map(String) };
+    return offerChapter(w, a, { chapter, prose: para ? proseOf(para) : '', adapted });
+  },
+  'chapter-pick': (w, a, b) => pickChapterGrants(w, a, {
+    chapter: n(b, 'chapter'), skill: os(b, 'skill'), raise: flag(b, 'raise'), skillOwn: flag(b, 'skillOwn'), trait: os(b, 'trait'), traitOwn: flag(b, 'traitOwn'),
+  }),
+  'chapter-object': (w, a, b) => objectToPick(w, a, { characterId: s(b, 'characterId'), chapter: n(b, 'chapter'), part: part(b) }),
   swap: (w, a, b) => swapGrant(w, a, { chapter: n(b, 'chapter'), part: part(b) }),
   output: (w, a, b) => chooseOutput(w, a, { chapter: n(b, 'chapter'), output: output(b) }),
   fact: (w, a, b) => addWorldFact(w, a, { chapter: n(b, 'chapter'), text: s(b, 'text'), community: os(b, 'community') }),

@@ -40,8 +40,9 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   GM notes document `<campaign>~gm`, suggestion log and per-session cap. `docs/m6-notes.md`.
 - M7 battle, async, phone: done. `packages/rules/src/battle-flow.ts` and `spotlight.ts`, `apps/sync/src/game/battles.ts` + `battle-routes.ts`, the Mailer (`QUILLQUEST_MAIL=resend|log|fake|none`, `docs/mail-providers.md`),
   `apps/sync/src/notify/` (batching, presence, preferences, deep links), a 30-second background job (mail, push windows, stalls), public `battles` map. `docs/m7-notes.md`.
+- M9 chapter library: done. `packages/rules/src/chapter-library.ts` (24 original templates, keyword matcher), `offerChapter`/`pickChapterGrants`/`objectToPick` in `creation-flow.ts`, steps `chapter-offer|pick|object`, adapt via the `grant` kind with `adapt: true`. A writer's own pick applies at once; anyone else can object. `docs/m9-notes.md`.
 - Interface design pass: done. `packages/layout` (the dock model), saved layouts (`layouts` table, `/layout` routes), design tokens and themes (`app/tokens.css`), the dock (`components/dock/`), and an axe-core accessibility audit in Playwright. `docs/m8-notes.md`.
-- Test counts: 25 story, 20 layout, 279 rules, 15 prompts, 31 db, 136 sync, 13 web, 35 Playwright.
+- Test counts: 25 story, 20 layout, 294 rules, 16 prompts, 31 db, 138 sync, 13 web, 36 Playwright.
 - All seven milestones and the design pass are done. Next: playtest, real Supabase sign-in, and a real mail and model key.
 
 ## Gotchas

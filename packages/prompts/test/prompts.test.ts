@@ -28,6 +28,15 @@ describe('who may ask for what', () => {
   });
 });
 
+describe('chapter template adaptation', () => {
+  it('shows the nearest template to the model, and nothing else about the table', () => {
+    const r = buildRequest({ ...(inputs.grant as Extract<Input, { kind: 'grant' }>), template: { name: 'The Gate Warden', skills: ['Gatekeeping'], traits: ['Watchful'] } }, 'player');
+    expect(r.user).toContain('The Gate Warden');
+    expect(r.user).toContain('Gatekeeping');
+    expect(buildRequest(inputs.grant!, 'player').user).not.toContain('library template');
+  });
+});
+
 describe('every prompt', () => {
   it('names the themes to handle lightly or leave out, says it is a draft, and asks for JSON only', () => {
     for (const [k, input] of Object.entries(inputs)) {

@@ -4,6 +4,7 @@ import { RuleViolation } from './errors';
 import { RATED_SKILL_RANKS, skillIndex, type RatedSkillRank } from './ranks';
 import { newCharacter, type BeliefKind, type Character, type GrantPick } from './character';
 import { validateCreation, type CreationProblem } from './creation';
+import { matchTemplates, type MatchTier } from './chapter-library';
 
 export interface CreationActor { id: string; role: 'gm' | 'player' }
 
@@ -14,7 +15,7 @@ export interface SkillProposal { id: string; by: string; accepts: string[]; skil
 export interface TraitProposal { id: string; by: string; accepts: string[]; trait: string }
 export interface SkillApplied { by: GrantBy; name: string; mode: 'new' | 'raise'; fromRank: RatedSkillRank | null; toRank: RatedSkillRank }
 export interface TraitApplied { by: GrantBy; text: string; traitId: string }
-export type GrantBy = 'other-player' | 'majority' | 'gm';
+export type GrantBy = 'other-player' | 'majority' | 'gm' | 'self';
 export interface GrantSlot<P, A> { proposals: P[]; applied: A | null; reopened?: boolean }
 
 export type ChapterOutput =
@@ -22,15 +23,25 @@ export type ChapterOutput =
   | { kind: 'resource'; text: string; raise: 'wealth' | 'network' }
   | { kind: 'thread'; text: string };
 
+/** What a chapter's writer may pick from: a library template's lists, or those lists adapted by the AI. Words only; the writer's pick is what applies. */
+export interface ChapterOffer {
+  templateId: string | null; source: 'library' | 'ai'; tier: MatchTier; name: string;
+  skills: string[]; traits: string[]; outputs: { connection: string[]; resource: string[]; thread: string[] };
+  /** The Origin Skill, when the writer may raise it a rank (Trained to Capable) once in session zero. */
+  raise?: string;
+}
 export interface ChapterState {
   index: number; paragraphId: string; summary: string; endsBadly: boolean; testedBelief: boolean;
   skill: GrantSlot<SkillProposal, SkillApplied>; trait: GrantSlot<TraitProposal, TraitApplied>;
   output: ChapterOutput | null; factId: string | null;
+  offer?: ChapterOffer | null;
 }
 export interface OriginState { paragraphId: string | null; skill: string | null; connection: string | null }
 export interface CreationState {
   status: 'creating' | 'ready'; veteran: boolean; origin: OriginState; chapters: ChapterState[];
   swapUsed: boolean; hookThreadId: string | null; burdenChosen: boolean; standingPrompts: string[];
+  /** The one self-chosen raise to Capable (chapter offers) has been spent. */
+  selfRaiseUsed?: boolean;
 }
 export interface CrossingProposal {
   id: string; from: string; to: string; fromChapter: number; toChapter: number; paragraphId: string; touchesBelief: boolean;
@@ -264,12 +275,91 @@ export function swapGrant(w: W, actor: CreationActor, a: { chapter: number; part
   const ch = s.chapters[a.chapter] ?? no('NO_SUCH_CHAPTER', 'No such chapter');
   const applied = ch[a.part].applied;
   if (!applied) no('NOTHING_TO_SWAP', 'That grant has not been applied');
-  let sheet = c;
-  if (a.part === 'skill') {
+  const sheet = revertApplied(c, a.part, applied!);
+  const raised = a.part === 'skill' && (applied as SkillApplied).by === 'self' && (applied as SkillApplied).mode === 'raise';
+  return put(w, sheet, { ...setSlot(s, a.chapter, a.part, { proposals: [], applied: null, reopened: true }), swapUsed: true, ...(raised ? { selfRaiseUsed: false } : {}) });
+}
+
+/** Undo an applied grant on the sheet: remove the new Skill, lower the raised one back, or remove the Trait. */
+function revertApplied(c: Character, part: Part, applied: SkillApplied | TraitApplied): Character {
+  if (part === 'skill') {
     const k = applied as SkillApplied;
-    sheet = { ...c, skills: k.mode === 'new' ? c.skills.filter((x) => !eq(x.name, k.name)) : c.skills.map((x) => (eq(x.name, k.name) ? { ...x, rank: k.fromRank! } : x)) };
-  } else sheet = { ...c, traits: c.traits.filter((t) => t.id !== (applied as TraitApplied).traitId) };
-  return put(w, sheet, { ...setSlot(s, a.chapter, a.part, { proposals: [], applied: null, reopened: true }), swapUsed: true });
+    return { ...c, skills: k.mode === 'new' ? c.skills.filter((x) => !eq(x.name, k.name)) : c.skills.map((x) => (eq(x.name, k.name) ? { ...x, rank: k.fromRank! } : x)) };
+  }
+  return { ...c, traits: c.traits.filter((t) => t.id !== (applied as TraitApplied).traitId) };
+}
+
+// ---------- chapter offers: pick from a library template instead of waiting on the others ----------
+const listOf = (xs: string[] | undefined, what: string): string[] => {
+  const out = (xs ?? []).map((x) => text(x, what));
+  if (out.length > 4) no('BAD_INPUT', `At most four ${what.toLowerCase()} entries`);
+  if (out.some((x) => x.length > 80)) no('BAD_INPUT', `Keep each ${what.toLowerCase()} entry short`);
+  return out;
+};
+
+/** The writer asks for the library's offer for one of their chapters (prose read by the server), optionally with an AI-adapted list. */
+export function offerChapter(w: W, actor: CreationActor, a: { chapter: number; prose: string; adapted?: { skills: string[]; traits: string[] } }): W {
+  const c = charOf(w, actor); const s = stateOf(w, c.id);
+  const ch = s.chapters[a.chapter] ?? no('NO_SUCH_CHAPTER', 'No such chapter');
+  if (ch.skill.applied && ch.trait.applied) no('GRANT_APPLIED', "This chapter's grants are already settled");
+  const best = matchTemplates(a.prose, ch.summary)[0]!;
+  const t = best.tier === 'none' ? null : best.template;
+  const raise = !s.selfRaiseUsed && s.origin.skill && c.skills.some((k) => eq(k.name, s.origin.skill!) && k.rank === 'Trained') ? s.origin.skill : undefined;
+  const empty = { connection: [], resource: [], thread: [] };
+  let offer: ChapterOffer;
+  if (a.adapted) {
+    const skills = listOf(a.adapted.skills, 'Skill'); const traits = listOf(a.adapted.traits, 'Trait');
+    if (!skills.length && !traits.length) no('BAD_INPUT', 'The adapted offer is empty');
+    offer = { templateId: t?.id ?? null, source: 'ai', tier: best.tier, name: t?.name ?? 'Adapted chapter', skills, traits, outputs: t?.outputs ?? empty, ...(raise ? { raise } : {}) };
+  } else {
+    offer = t
+      ? { templateId: t.id, source: 'library', tier: best.tier, name: t.name, skills: t.skills, traits: ch.endsBadly ? t.harmfulTraits : t.traits, outputs: t.outputs, ...(raise ? { raise } : {}) }
+      : { templateId: null, source: 'library', tier: 'none', name: 'No close match', skills: [], traits: [], outputs: empty, ...(raise ? { raise } : {}) };
+  }
+  return put(w, c, { ...s, chapters: s.chapters.map((x) => (x.index === a.chapter ? { ...x, offer } : x)) });
+}
+
+/** The writer picks a Skill and/or a Trait for a chapter from its offer (or in their own words); it applies at once, and the others may object. */
+export function pickChapterGrants(w: W, actor: CreationActor, a: { chapter: number; skill?: string; raise?: boolean; skillOwn?: boolean; trait?: string; traitOwn?: boolean }): W {
+  const c0 = charOf(w, actor); const s0 = stateOf(w, c0.id);
+  const ch = s0.chapters[a.chapter] ?? no('NO_SUCH_CHAPTER', 'No such chapter');
+  if (!a.skill && !a.trait) no('BAD_INPUT', 'Pick a Skill or a Trait');
+  if ((a.skill && ch.skill.applied) || (a.trait && ch.trait.applied)) no('GRANT_APPLIED', 'That grant is already settled');
+  const offer = ch.offer ?? null;
+  const from = (value: string, list: string[], own: boolean | undefined, what: string): string => {
+    const v = text(value, what);
+    if (own) return v;
+    return list.find((x) => eq(x, v)) ?? no('NOT_OFFERED', `${what} is not one the offer lists; write it in your own words`);
+  };
+  let world = w; let sheet = c0; let state = s0;
+  if (a.skill) {
+    let applied: SkillApplied;
+    if (a.raise) {
+      if (!offer?.raise || s0.selfRaiseUsed || !eq(offer.raise, a.skill)) no('RAISE_NOT_AVAILABLE', 'No raise is available for that Skill');
+      const r = applySkill(sheet, { skill: offer!.raise!, mode: 'raise' }, 'self');
+      if (r.applied.fromRank !== 'Trained') no('RAISE_NOT_AVAILABLE', 'Only a Skill at Trained can be raised this way');
+      sheet = r.c; applied = r.applied; state = { ...state, selfRaiseUsed: true };
+    } else {
+      const r = applySkill(sheet, { skill: from(a.skill, offer?.skills ?? [], a.skillOwn, 'The Skill'), mode: 'new' }, 'self');
+      sheet = r.c; applied = r.applied;
+    }
+    state = setSlot(state, a.chapter, 'skill', { proposals: [], applied } as never);
+  }
+  if (a.trait) {
+    const r = applyTrait(world, sheet, ch, from(a.trait, offer?.traits ?? [], a.traitOwn, 'The Trait'), 'self');
+    world = r.w; sheet = r.c; state = setSlot(state, a.chapter, 'trait', { proposals: [], applied: r.applied } as never);
+  }
+  return put(world, sheet, state);
+}
+
+/** Another player objects to the writer's own pick: it is undone and the slot reopens to the usual proposals. The writer keeps their swap. */
+export function objectToPick(w: W, actor: CreationActor, a: { characterId: string; chapter: number; part: Part }): W {
+  asGrantor(w, actor, a.characterId);
+  const { c, s, ch } = grantCtx(w, a.characterId, a.chapter);
+  const applied = ch[a.part].applied as SkillApplied | TraitApplied | null;
+  if (!applied || applied.by !== 'self') no('NOT_SELF_PICKED', 'Only a pick the writer chose themselves can be objected to');
+  const raised = a.part === 'skill' && (applied as SkillApplied).mode === 'raise';
+  return put(w, revertApplied(c, a.part, applied!), { ...setSlot(s, a.chapter, a.part, { proposals: [], applied: null, reopened: true }), ...(raised ? { selfRaiseUsed: false } : {}) });
 }
 
 // ---------- chapter output ----------

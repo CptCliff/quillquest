@@ -463,7 +463,7 @@ export class GameService {
         const mine = s.characterOf[actor.id];
         const n = s.creation[mine ?? '']?.chapters.length ?? 0;
         for (const c of Object.values(s.characters)) if (c.ownerId && !c.left && c.ownerId !== actor.id)
-          this.tell(campaign, c.ownerId, { kind: 'grant', text: `${s.characters[mine!]?.name ?? 'A player'} posted a chapter: propose a Skill and a Trait.`, link: link.tab(campaign, 'create'), dedupeKey: `grant:${mine}:${n}:${c.ownerId}` });
+          this.tell(campaign, c.ownerId, { kind: 'grant', text: `${s.characters[mine!]?.name ?? 'A player'} posted a chapter. They may pick its Skill and Trait themselves (you can object), or you can propose them.`, link: link.tab(campaign, 'create'), dedupeKey: `grant:${mine}:${n}:${c.ownerId}` });
       }
       return { done: true as const };
     });

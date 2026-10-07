@@ -13,7 +13,8 @@ export interface DangerInput extends Base { kind: 'danger'; scene: string; card:
 export interface NpcLineInput extends Base { kind: 'npcLine'; scene: string; npc: { name: string; skills: string[]; beliefs: string[]; notes: string } }
 export interface OracleInput extends Base { kind: 'oracle'; scene: string; faces: string[] }
 export interface SkillMatchInput extends Base { kind: 'skillMatch'; sentence: string; skills: string[] }
-export interface GrantInput extends Base { kind: 'grant'; chapterProse: string; endsBadly: boolean }
+/** `template` is set when the chapter's own writer asks the assistant to adapt the nearest library template to what they wrote. */
+export interface GrantInput extends Base { kind: 'grant'; chapterProse: string; endsBadly: boolean; template?: { name: string; skills: string[]; traits: string[] } }
 export interface BeliefCheckInput extends Base { kind: 'beliefCheck'; belief: { kind: string; text: string } }
 export type Input = BeliefChallengeInput | DangerInput | NpcLineInput | OracleInput | SkillMatchInput | GrantInput | BeliefCheckInput;
 
@@ -77,6 +78,7 @@ export function buildRequest(input: Input, role: 'gm' | 'player'): Request {
       return { system, maxTokens: 300, user: [
         `Read this Life Chapter and suggest up to three Skills and up to three Traits the character could gain from it.${input.endsBadly ? ' This chapter ended badly, so the Traits should be harmful.' : ''}`,
         `Chapter: ${input.chapterProse}`,
+        ...(input.template ? [`The nearest library template is "${input.template.name}". Its Skills: ${list(input.template.skills)}. Its Traits: ${list(input.template.traits)}. Keep what fits this chapter and change what does not.`] : []),
         'Answer as {"skills": ["..."], "traits": ["..."]}.',
       ].join('\n') };
     case 'beliefCheck':

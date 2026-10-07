@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { majorityOf, type Character, type CreationState, type CrossingProposal, type ChapterState } from '@quillquest/rules';
-import type { GameApi } from '../lib/game-api';
+import { ApiFailure, type GameApi } from '../lib/game-api';
 import { StepForm, type FieldSpec } from './Forms';
 import { myParagraphs, useAct } from './Ledger';
 import type { Me } from './StoryEditor';
@@ -34,7 +34,7 @@ function usedParagraphs(creation: Record<string, CreationState>, crossings: Cros
 /** What the writer sees of a grant slot on their own chapter. */
 function slotText(slot: ChapterState['skill'] | ChapterState['trait']): string {
   const a = slot.applied as null | { name?: string; text?: string; by: string; toRank?: string };
-  if (a) return `${a.name ?? a.text}${a.toRank ? ` (${a.toRank})` : ''} · by ${a.by}`;
+  if (a) return `${a.name ?? a.text}${a.toRank ? ` (${a.toRank})` : ''} · ${a.by === 'self' ? 'picked by the writer' : `by ${a.by}`}`;
   return slot.proposals.length ? `${slot.proposals.length} proposed, waiting for agreement` : 'waiting for the other players';
 }
 
@@ -91,7 +91,7 @@ export function Creation(p: CreationProps) {
         {st.chapters.length === 0 && (
           <label className="check"><input type="checkbox" data-testid="veteran" checked={st.veteran} onChange={(e) => run(() => act('veteran', { veteran: e.target.checked }))} /> A veteran: four chapters instead of three</label>
         )}
-        {st.chapters.map((ch) => <ChapterBlock key={ch.index} ch={ch} st={st} others={others} run={run} busy={busy} act={act} />)}
+        {st.chapters.map((ch) => <ChapterBlock key={ch.index} ch={ch} st={st} others={others} run={run} busy={busy} act={act} game={game} characterId={mine.id} />)}
         {st.origin.paragraphId && st.chapters.length < maxChapters && (
           <StepForm testId="chapter" title="Post the next chapter" label="Post chapter" run={run} busy={busy}
             fields={[
@@ -158,8 +158,8 @@ export function Creation(p: CreationProps) {
   );
 }
 
-function ChapterBlock({ ch, st, others, run, busy, act }: {
-  ch: ChapterState; st: CreationState; others: Character[]; run: Run; busy: boolean;
+function ChapterBlock({ ch, st, others, run, busy, act, game, characterId }: {
+  characterId: string; ch: ChapterState; st: CreationState; others: Character[]; run: Run; busy: boolean; game: GameApi;
   act: (n: string, b?: Record<string, unknown>) => Promise<unknown>;
 }) {
   return (
@@ -167,6 +167,7 @@ function ChapterBlock({ ch, st, others, run, busy, act }: {
       <strong>Chapter {ch.index + 1}{ch.endsBadly ? ' · ended badly' : ''}</strong>: {ch.summary}
       <div>Skill: <span data-testid="chapter-skill">{slotText(ch.skill)}</span>{ch.skill.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-skill" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'skill' }))}> swap</button>}</div>
       <div>Trait: <span data-testid="chapter-trait">{slotText(ch.trait)}</span>{ch.trait.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-trait" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'trait' }))}> swap</button>}</div>
+      {(!ch.skill.applied || !ch.trait.applied) && <ChapterOffer ch={ch} st={st} run={run} busy={busy} act={act} game={game} characterId={characterId} />}
       {ch.output ? <div>Output: {ch.output.kind} — {ch.output.text}</div> : (
         <StepForm testId={`output-${ch.index}`} title="What does this chapter leave you?" label="Save output" run={run} busy={busy}
           fields={[
@@ -182,6 +183,55 @@ function ChapterBlock({ ch, st, others, run, busy, act }: {
           fields={[{ key: 'text', label: 'The fact' }, { key: 'community', label: 'A community it names (optional)' }]}
           submit={(v) => act('fact', { chapter: ch.index, text: v.text, community: v.community || undefined })} />
       )}
+    </div>
+  );
+}
+
+const OWN = '__own';
+
+/** The chapter library's offer for one of your chapters: pick a Skill and a Trait from a list instead of waiting for the others to propose. */
+function ChapterOffer({ ch, st, run, busy, act, game, characterId }: { characterId: string; ch: ChapterState; st: CreationState; run: Run; busy: boolean; game: GameApi; act: (n: string, b?: Record<string, unknown>) => Promise<unknown> }) {
+  const offer = ch.offer ?? null;
+  const n = ch.index;
+  if (!offer) {
+    return (
+      <div data-testid={`offer-${n}`} className="offer">
+        <button type="button" data-testid={`offer-get-${n}`} disabled={busy} onClick={() => run(() => act('chapter-offer', { chapter: n }))}>Suggest a Skill and Trait from the chapter library</button>
+        <p className="muted">Or wait: the other players can propose a Skill and a Trait for you below.</p>
+      </div>
+    );
+  }
+  const raiseOption = offer.raise && !ch.skill.applied ? [{ value: `__raise:${offer.raise}`, label: `Raise ${offer.raise} to Capable (once, for the whole of creation)` }] : [];
+  const skillOptions = [{ value: '', label: ch.skill.applied ? 'Already settled' : 'Choose a Skill…' }, ...offer.skills.map((x) => ({ value: x, label: `${x} (new, Trained)` })), ...raiseOption];
+  const traitOptions = [{ value: '', label: ch.trait.applied ? 'Already settled' : 'Choose a Trait…' }, ...offer.traits.map((x) => ({ value: x, label: x }))];
+  const title = offer.tier === 'none' ? 'No close match in the chapter library' : `${offer.source === 'ai' ? 'Adapted from' : 'Close to'} “${offer.name}”`;
+  return (
+    <div data-testid={`offer-${n}`} className="offer" data-source={offer.source} data-tier={offer.tier}>
+      <strong>{title}</strong>
+      {offer.tier === 'partial' && offer.source === 'library' && (
+        <button type="button" className="linklike" data-testid={`offer-adapt-${n}`} disabled={busy}
+          onClick={() => run(async () => { const draft = (await game.ask('grant', { characterId, chapter: n, adapt: true })).suggestion.draft as { skills: string[]; traits: string[] }; await act('chapter-offer', { chapter: n, adapted: draft }); })}>Adapt it to my chapter with Claude</button>
+      )}
+      {offer.tier !== 'none' && <p className="muted">Ideas for what the chapter leaves you: Connection, {offer.outputs.connection[0] ?? '—'}; Resource, {offer.outputs.resource[0] ?? '—'}; Thread, {offer.outputs.thread[0] ?? '—'}.</p>}
+      <StepForm testId={`pick-${n}`} label="Take these" run={run} busy={busy}
+        fields={[
+          ...(ch.skill.applied ? [] : [{ key: 'skill', label: `Skill for chapter ${n + 1}`, kind: 'select' as const, options: skillOptions }, { key: 'skillOwn', label: `Or a Skill in your own words (chapter ${n + 1})` }]),
+          ...(ch.trait.applied ? [] : [{ key: 'trait', label: `${ch.endsBadly ? 'Harmful Trait' : 'Trait'} for chapter ${n + 1}`, kind: 'select' as const, options: traitOptions }, { key: 'traitOwn', label: `Or a ${ch.endsBadly ? 'harmful ' : ''}Trait in your own words (chapter ${n + 1})` }]),
+        ]}
+        submit={(v) => {
+          const body: Record<string, unknown> = { chapter: n };
+          const skill = String(v.skillOwn ?? '').trim() || String(v.skill ?? '');
+          if (skill) {
+            if (String(v.skillOwn ?? '').trim()) { body.skill = skill; body.skillOwn = true; }
+            else if (skill.startsWith('__raise:')) { body.skill = skill.slice(8); body.raise = true; }
+            else body.skill = skill;
+          }
+          const trait = String(v.traitOwn ?? '').trim() || String(v.trait ?? '');
+          if (trait) { body.trait = trait; if (String(v.traitOwn ?? '').trim()) body.traitOwn = true; }
+          if (!body.skill && !body.trait) return Promise.reject(new ApiFailure('Choose a Skill or a Trait first', 'BAD_INPUT', 400));
+          return act('chapter-pick', body);
+        }} />
+      <p className="muted">The others can object to a pick; then they propose instead. {st.selfRaiseUsed ? 'Your one raise to Capable is spent.' : ''}</p>
     </div>
   );
 }
@@ -235,7 +285,7 @@ function Crossings({ st, mine, others, creation, crossings, characters, paraOpti
 function GrantCards({ me, others, characters, creation, run, busy, act, game }: {
   game: GameApi; me: Me; others: Character[]; characters: Record<string, Character>; creation: Record<string, CreationState>; run: Run; busy: boolean; act: (n: string, b?: Record<string, unknown>) => Promise<unknown>;
 }) {
-  const open = others.flatMap((c) => (creation[c.id]?.chapters ?? []).map((ch) => ({ c, ch }))).filter(({ ch }) => !ch.skill.applied || !ch.trait.applied);
+  const open = others.flatMap((c) => (creation[c.id]?.chapters ?? []).map((ch) => ({ c, ch }))).filter(({ ch }) => !ch.skill.applied || !ch.trait.applied || (ch.skill.applied as { by?: string }).by === 'self' || (ch.trait.applied as { by?: string }).by === 'self');
   if (!others.length) return null;
   const needed = majorityOf(others.length);
   const who = (id: string) => Object.values(characters).find((c) => c.ownerId === id)?.name ?? id;
@@ -249,7 +299,11 @@ function GrantCards({ me, others, characters, creation, run, busy, act, game }: 
           <GrantIdeas game={game} characterId={c.id} chapter={ch.index} run={run} busy={busy} act={act} />
           {(['skill', 'trait'] as const).map((part) => {
             const slot = ch[part] as ChapterState['skill'] & ChapterState['trait'];
-            if (slot.applied) return <div key={part} data-testid={`grant-${part}-done`}>{part === 'skill' ? 'Skill' : 'Trait'}: {slotText(slot)}</div>;
+            if (slot.applied) return (
+              <div key={part} data-testid={`grant-${part}-done`}>{part === 'skill' ? 'Skill' : 'Trait'}: {slotText(slot)}
+                {(slot.applied as { by?: string }).by === 'self' && <button type="button" className="linklike" data-testid="object" disabled={busy} onClick={() => run(() => act('chapter-object', { characterId: c.id, chapter: ch.index, part }))}> Object</button>}
+              </div>
+            );
             return (
               <div key={part} data-testid={`grant-${part}`}>
                 <em>{part === 'skill' ? 'Skill' : 'Trait'}</em> (needs {needed} of {others.length} to agree)

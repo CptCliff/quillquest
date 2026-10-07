@@ -14,6 +14,7 @@ export * from './creation';
 export * from './flow';
 export * from './chips';
 export * from './creation-flow';
+export * from './chapter-library';
 export * from './director';
 export * from './battle-flow';
 export * from './spotlight';

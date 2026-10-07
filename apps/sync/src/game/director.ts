@@ -1,5 +1,5 @@
 import {
-  awardDirect, awardNomination, declineNomination, editNpc, newNpc, nominate, publicNpc, revealField, startTableSession,
+  awardDirect, awardNomination, declineNomination, editNpc, matchTemplates, newNpc, nominate, publicNpc, revealField, startTableSession,
   type ConvictionReason, type DirectorWorld, type NpcField, type NominationKind, type Npc,
 } from '@quillquest/rules';
 import { buildRequest, kindsFor, parseAnswer, type Draft, type Input, type ParseContext, type SuggestionKind } from '@quillquest/prompts';
@@ -192,10 +192,15 @@ export class DirectorService {
         const st = s.creation[characterId]?.chapters[chapter];
         if (!st) throw new GameError(404, 'NO_SUCH_CHAPTER', 'No such chapter');
         const others = Object.values(s.characters).filter((c) => c.ownerId && !c.left && c.id !== characterId).map((c) => c.ownerId);
-        if (!others.includes(actor.id)) throw new GameError(403, 'NOT_ALLOWED', 'Only the other players suggest grants');
+        // The other players suggest grants; the chapter's own writer may ask for the library template adapted to their prose.
+        const adapting = params.adapt === true && s.characters[characterId]?.ownerId === actor.id;
+        if (!adapting && !others.includes(actor.id)) throw new GameError(403, 'NOT_ALLOWED', 'Only the other players suggest grants');
         const story = await this.d.docs.story(campaign);
         const para = story.find((p) => p.paragraphId === st.paragraphId);
-        return { kind, themes, chapterProse: para ? textOf(para).slice(0, 4000) : st.summary, endsBadly: st.endsBadly };
+        const prose = para ? textOf(para).slice(0, 4000) : st.summary;
+        const best = adapting ? matchTemplates(prose, st.summary)[0] : undefined;
+        const template = best && best.tier !== 'none' ? { name: best.template.name, skills: best.template.skills, traits: st.endsBadly ? best.template.harmfulTraits : best.template.traits } : undefined;
+        return { kind, themes, chapterProse: prose, endsBadly: st.endsBadly, ...(template ? { template } : {}) };
       }
       case 'beliefChallenge': {
         const c = s.characters[body(params, 'characterId')];

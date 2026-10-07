@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { REJECTED_PREFIX } from '../src/server';
 import { type Identity } from '../src/auth';
+import { MemoryStore } from '../src/store';
+import { FakeProvider } from '../src/llm';
 import { GM, addParagraph, api, attrs, connect, startServer, textOf, waitFor, type Client } from './helpers';
 
 const open: { destroy(): void | Promise<void> }[] = [];
@@ -14,8 +16,8 @@ const WREN: Identity = { id: 'wren', name: 'Wren', role: 'player', color: '#0e74
 const C = 'campaign-1';
 const base = `/api/campaigns/${C}`;
 
-async function table(players: Identity[] = [MIRA, TOBIN, WREN]) {
-  const s = await startServer();
+async function table(players: Identity[] = [MIRA, TOBIN, WREN], llm: FakeProvider | null = null) {
+  const s = await startServer(new MemoryStore(), { devDice: true }, llm);
   track({ destroy: () => s.server.destroy() });
   const gm = track(await connect(s.url, GM));
   const clients: Record<string, Client> = {};
@@ -225,5 +227,47 @@ describe('solo drafts', () => {
     addParagraph(own.fragment, attrs('d0', 'mira'), 'Hidden words.');
     await new Promise((r) => setTimeout(r, 100));
     expect(JSON.stringify([t.gm.doc.getMap('creation').toJSON(), t.gm.doc.getMap('canon').toJSON(), t.gm.doc.getMap('campaign').toJSON(), t.gm.doc.getMap('characters').toJSON()])).not.toContain('Hidden');
+  });
+});
+
+describe('chapter offers over HTTP', () => {
+  async function ready() {
+    const t = await table([MIRA, TOBIN, WREN], new FakeProvider());
+    await t.write(MIRA, 'm0', 'I was born in a gatehouse.');
+    await t.write(MIRA, 'm1', 'I stood the north gate for six winters, checking carts and toll papers at the border.');
+    await t.write(MIRA, 'm2', 'Then the war came.');
+    await t.write(MIRA, 'm3', 'Then I walked home.');
+    await t.step(MIRA, 'origin-post', { paragraphId: 'm0' });
+    await t.step(MIRA, 'origin-picks', { skill: 'Sneak', connection: 'Wren' });
+    for (const [i, id] of ['m1', 'm2', 'm3'].entries()) await t.step(MIRA, 'chapter', { paragraphId: id, summary: i === 0 ? 'Gate guard at the border' : `Chapter ${i + 1}`, endsBadly: i === 1 });
+    return t;
+  }
+  const chapter = (t: Awaited<ReturnType<typeof table>>, ch = 0) => (t.gm.doc.getMap('creation').get('mira-pc') as any).chapters[ch];
+
+  it('the writer gets an offer from their own prose, picks from it, and another player can object', async () => {
+    const t = await ready();
+    expect((await t.step(MIRA, 'chapter-offer', { chapter: 0 })).status).toBe(200);
+    await waitFor(() => chapter(t).offer?.templateId === 'gate-warden');
+    expect(chapter(t).offer.skills).toContain('Gatekeeping');
+    expect((await t.step(MIRA, 'chapter-pick', { chapter: 0, skill: 'Dragon Slaying', trait: 'Watchful' })).json.error.code).toBe('NOT_OFFERED');
+    expect((await t.step(TOBIN, 'chapter-pick', { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' })).status).toBe(409); // Tobin has no such chapter of his own
+    expect((await t.step(MIRA, 'chapter-pick', { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' })).status).toBe(200);
+    await waitFor(() => chapter(t).skill.applied?.by === 'self');
+    expect((t.gm.doc.getMap('characters').get('mira-pc') as any).skills.map((k: any) => k.name)).toContain('Gatekeeping');
+    expect((await t.step(MIRA, 'chapter-object', { characterId: 'mira-pc', chapter: 0, part: 'skill' })).status).toBe(403);
+    expect((await t.step(GM, 'chapter-object', { characterId: 'mira-pc', chapter: 0, part: 'skill' })).status).toBe(403);
+    expect((await t.step(TOBIN, 'chapter-object', { characterId: 'mira-pc', chapter: 0, part: 'skill' })).status).toBe(200);
+    await waitFor(() => chapter(t).skill.applied === null);
+    expect(chapter(t).skill.reopened).toBe(true);
+  });
+  it('the writer may ask the assistant to adapt the template; nobody else may, and no GM data rides along', async () => {
+    const t = await ready();
+    expect((await t.call(MIRA, 'POST', '/llm/grant', { characterId: 'mira-pc', chapter: 0, adapt: true })).status).toBe(200);
+    expect((await t.call(TOBIN, 'POST', '/llm/grant', { characterId: 'mira-pc', chapter: 0, adapt: true })).status).toBe(200); // the other players may ask for grant ideas, as before
+    expect((await t.call(GM, 'POST', '/llm/grant', { characterId: 'mira-pc', chapter: 0, adapt: true })).status).toBe(403);
+    expect((await t.step(MIRA, 'chapter-offer', { chapter: 0, adapted: { skills: ['Border Law'], traits: ['Unbribable'] } })).status).toBe(200);
+    await waitFor(() => chapter(t).offer?.source === 'ai');
+    expect(chapter(t).offer.skills).toEqual(['Border Law']);
+    expect((await t.step(MIRA, 'chapter-offer', { chapter: 0, adapted: { skills: [], traits: [] } })).status).toBe(400);
   });
 });

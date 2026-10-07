@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RuleViolation, acceptProposal, addCreatingCharacter, addReadyCharacter, addWorldFact, beginPlay, canRoll, chooseHook, chooseOutput, confirmCrossing,
+  RuleViolation, offerChapter, pickChapterGrants, objectToPick, acceptProposal, addCreatingCharacter, addReadyCharacter, addWorldFact, beginPlay, canRoll, chooseHook, chooseOutput, confirmCrossing,
   declineCrossing, draftProblems, emptyWorld, endCheck, finishCreation, gmResolveGrant, importDraft, majorityOf, overrideCheck, pickOrigin,
   postChapter, postOrigin, proposeCrossing, proposeSkill, proposeTrait, withdrawVote, setBeliefs, setCapital, setInstincts, setVeteran, setWorldFact, startingBurden, swapGrant,
   othersOf, slotState, newCharacter, type CreationWorld, type CreationActor,
@@ -536,5 +536,77 @@ describe('solo drafts (7.1)', () => {
     const four = { ...v, chapters: [...v.chapters, { paragraphId: 'd4', summary: 'More', endsBadly: false }] };
     expect(draftProblems(four)).toEqual([]);
     expect(st(importDraft(table(), ilse, four, { d0: 'a', d1: 'b', d2: 'c', d3: 'd', d4: 'e' }), 'ilse').veteran).toBe(true);
+  });
+});
+
+describe('chapter offers and self-picked grants', () => {
+  const posted = () => pickOrigin(withChapters(table(), 'ilse', ['c1', 'c2', 'c3']), ilse, { skill: 'Sneak', connection: 'Wren' });
+  const gate = 'I stood the north gate for six winters, checking carts and toll papers at the border.';
+  const offered = (w = posted(), chapter = 0, prose = gate) => offerChapter(w, ilse, { chapter, prose });
+  const off = (w: CreationWorld, chapter = 0) => st(w, 'ilse').chapters[chapter]!.offer!;
+
+  it('a close match offers the template lists; the bad chapter is offered the harmful Traits', () => {
+    const w = offered();
+    expect(off(w)).toMatchObject({ templateId: 'gate-warden', source: 'library', tier: 'close' });
+    expect(off(w).skills).toContain('Gatekeeping');
+    expect(off(offered(posted(), 1), 1).traits).toEqual(expect.arrayContaining(['Suspicious of Everyone']));
+  });
+  it('no match leaves nothing to pick from, so the old grant cards are the way', () => {
+    const w = offered(posted(), 0, 'Zzz qqq xxx');
+    expect(off(w)).toMatchObject({ templateId: null, tier: 'none', skills: [], traits: [] });
+  });
+  it('an AI-adapted list replaces the template lists and is validated', () => {
+    const w = offerChapter(posted(), ilse, { chapter: 0, prose: gate, adapted: { skills: ['Border Law', 'Reading Papers'], traits: ['Unbribable'] } });
+    expect(off(w)).toMatchObject({ source: 'ai', skills: ['Border Law', 'Reading Papers'], traits: ['Unbribable'], templateId: 'gate-warden' });
+    fails(() => offerChapter(posted(), ilse, { chapter: 0, prose: gate, adapted: { skills: [''], traits: ['x'] } }), 'BAD_INPUT');
+    fails(() => offerChapter(posted(), ilse, { chapter: 0, prose: gate, adapted: { skills: ['a', 'b', 'c', 'd', 'e'], traits: ['x'] } }), 'BAD_INPUT');
+  });
+  it('only the writer asks for an offer', () => {
+    fails(() => offerChapter(posted(), sella, { chapter: 0, prose: gate }), 'NO_SUCH_CHAPTER');
+  });
+  it('picking a Skill and a Trait from the offer applies both at once, by the writer', () => {
+    const w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'gatekeeping', trait: 'Watchful' });
+    expect(st(w, 'ilse').chapters[0]!.skill.applied).toMatchObject({ by: 'self', name: 'Gatekeeping', toRank: 'Trained' });
+    expect(st(w, 'ilse').chapters[0]!.trait.applied).toMatchObject({ by: 'self', text: 'Watchful' });
+    expect(sheet(w, 'ilse').skills.map((s) => s.name)).toContain('Gatekeeping');
+  });
+  it('a value that is not in the offer is refused unless the writer says it is their own', () => {
+    fails(() => pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Dragon Slaying', trait: 'Watchful' }), 'NOT_OFFERED');
+    const w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Dragon Slaying', skillOwn: true, trait: 'Watchful' });
+    expect(sheet(w, 'ilse').skills.map((s) => s.name)).toContain('Dragon Slaying');
+  });
+  it('one self-chosen raise to Capable is available, on the Origin Skill, once', () => {
+    let w = offered();
+    expect(off(w).raise).toBe('Sneak');
+    w = pickChapterGrants(w, ilse, { chapter: 0, skill: 'Sneak', raise: true, trait: 'Watchful' });
+    expect(sheet(w, 'ilse').skills).toContainEqual({ name: 'Sneak', rank: 'Capable' });
+    expect(st(w, 'ilse').selfRaiseUsed).toBe(true);
+    const second = offerChapter(w, ilse, { chapter: 1, prose: gate });
+    expect(off(second, 1).raise).toBeUndefined();
+    fails(() => pickChapterGrants(second, ilse, { chapter: 1, skill: 'Sneak', raise: true, trait: 'Hard to Fool' }), 'RAISE_NOT_AVAILABLE');
+  });
+  it('another player can object: the pick is undone, the slot reopens for proposals, and the writer keeps their swap', () => {
+    let w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Sneak', raise: true, trait: 'Watchful' });
+    w = objectToPick(w, sella, { characterId: 'ilse-pc', chapter: 0, part: 'skill' });
+    const ch = st(w, 'ilse').chapters[0]!;
+    expect(ch.skill).toMatchObject({ applied: null, reopened: true, proposals: [] });
+    expect(sheet(w, 'ilse').skills).toContainEqual({ name: 'Sneak', rank: 'Trained' });
+    expect(st(w, 'ilse').selfRaiseUsed).toBe(false);
+    expect(st(w, 'ilse').swapUsed).toBe(false);
+    w = proposeSkill(w, sella, { characterId: 'ilse-pc', chapter: 0, skill: 'Climb', mode: 'new' });
+    w = acceptProposal(w, rook, { characterId: 'ilse-pc', chapter: 0, part: 'skill', proposalId: st(w, 'ilse').chapters[0]!.skill.proposals[0]!.id });
+    expect(st(w, 'ilse').chapters[0]!.skill.applied).toMatchObject({ by: 'majority', name: 'Climb' });
+  });
+  it('only another player objects, and only to a pick the writer made themselves', () => {
+    const w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' });
+    fails(() => objectToPick(w, ilse, { characterId: 'ilse-pc', chapter: 0, part: 'skill' }), 'NOT_ALLOWED');
+    fails(() => objectToPick(w, gm, { characterId: 'ilse-pc', chapter: 0, part: 'skill' }), 'NOT_ALLOWED');
+    const agreed = proposeSkill(posted(), sella, { characterId: 'ilse-pc', chapter: 0, skill: 'Climb', mode: 'new' });
+    const done = acceptProposal(agreed, rook, { characterId: 'ilse-pc', chapter: 0, part: 'skill', proposalId: st(agreed, 'ilse').chapters[0]!.skill.proposals[0]!.id });
+    fails(() => objectToPick(done, sella, { characterId: 'ilse-pc', chapter: 0, part: 'skill' }), 'NOT_SELF_PICKED');
+  });
+  it('a pick cannot overwrite a grant that is already settled', () => {
+    const w = pickChapterGrants(offered(), ilse, { chapter: 0, skill: 'Gatekeeping', trait: 'Watchful' });
+    fails(() => pickChapterGrants(w, ilse, { chapter: 0, skill: 'Hold the Line', trait: 'Stoic' }), 'GRANT_APPLIED');
   });
 });
