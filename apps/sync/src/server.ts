@@ -41,6 +41,9 @@ export interface SyncServerOptions {
 export const REJECTED_PREFIX = 'rejected:';
 const REJECTED_CODE = 4403;
 
+/** Why the server closed a socket because the person's standing in the campaign changed (they left). The browser rebuilds its session. */
+export const MEMBERSHIP_CHANGED = 'membership-changed';
+
 export function createSyncServer(opts: SyncServerOptions) {
   const dice = opts.game?.dice ?? new QueuedDice();
   const db = opts.auth?.db;
@@ -61,7 +64,9 @@ export function createSyncServer(opts: SyncServerOptions) {
       if (db) await db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color);
       const identity = await directory.resolve(claims, documentName);
       if (!identity) throw new Error('not a member of this campaign');
-      if (identity.left) connectionConfig.readOnly = true; // a member who left may still read the story
+      // A member who left may still read the story. Hocuspocus drops every write on a read-only connection (its normal sync
+      // handshake still works), so there is nothing for us to reject, and rejecting would only make their browser reconnect forever.
+      if (identity.left) connectionConfig.readOnly = true;
       return { identity: identity satisfies Identity };
     },
 
@@ -84,7 +89,6 @@ export function createSyncServer(opts: SyncServerOptions) {
       const identity = context.identity as Identity;
       const inner = extractSyncUpdate(update);
       if (!inner) return;
-      if (identity.left) throw Object.assign(new Error('rejected: LEFT'), { code: REJECTED_CODE, reason: `${REJECTED_PREFIX}LEFT` });
       const { violations } = checkUpdate(document, inner, identity);
       if (violations.length) {
         const codes = [...new Set(violations.map((v) => v.code))].join(',');
@@ -104,7 +108,13 @@ export function createSyncServer(opts: SyncServerOptions) {
     dice,
     docs: new HocuspocusDocPort(server.hocuspocus),
   });
-  game = (req, res) => handleGameRequest(req, res, { service, dice, providers, directory, db, devDice: opts.game?.devDice ?? false });
+  /** Closes a person's live connections to one campaign; they reconnect and are authenticated afresh (as read-only if they left). */
+  const dropConnections = (campaign: string, userId: string) => {
+    server.hocuspocus.documents.get(campaign)?.connections.forEach((_entry, conn) => {
+      if ((conn.context as { identity?: Identity } | undefined)?.identity?.id === userId) conn.close({ code: 1000, reason: MEMBERSHIP_CHANGED });
+    });
+  };
+  game = (req, res) => handleGameRequest(req, res, { service, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
   return Object.assign(server, { game: service });
 }
 

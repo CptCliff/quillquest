@@ -15,6 +15,8 @@ export interface StoryGuardOptions {
   ink: (userId: string) => { name: string; color: string };
   /** Called when an edit is refused, so the UI can say why. */
   onReject: (violations: Pick<Violation, 'code' | 'message'>[]) => void;
+  /** Tapping a paragraph's author tag. */
+  onOpenAuthor: (userId: string) => void;
 }
 
 /** Meta flag for commands that must not become suggestions (a writer withdrawing their own suggestion, the GM's lock buttons). */
@@ -68,7 +70,7 @@ export const StoryGuard = Extension.create<StoryGuardOptions>({
   name: 'storyGuard',
 
   addOptions() {
-    return { userId: '', role: 'player', ink: () => ({ name: '', color: '#444' }), onReject: () => {} };
+    return { userId: '', role: 'player', ink: () => ({ name: '', color: '#444' }), onReject: () => {}, onOpenAuthor: () => {} };
   },
 
   dispatchTransaction({ transaction, next }) {
@@ -136,13 +138,27 @@ export const StoryGuard = Extension.create<StoryGuardOptions>({
           decorations(state) {
             const decorations: Decoration[] = [];
             state.doc.forEach((node, offset) => {
-              const who = opts.ink(node.attrs.authorId ?? opts.userId);
+              const authorId: string = node.attrs.authorId ?? opts.userId;
+              const who = opts.ink(authorId);
+              const locked = !!node.attrs.locked;
               decorations.push(
                 Decoration.node(offset, offset + node.nodeSize, {
                   style: `--ink:${who.color}`,
                   'data-author-name': who.name,
-                  class: node.attrs.locked ? 'is-locked' : '',
+                  class: locked ? 'is-locked' : '',
                 }),
+                // The author's name, tappable: it opens their character card.
+                Decoration.widget(offset + 1, () => {
+                  const tag = document.createElement('button');
+                  tag.type = 'button';
+                  tag.className = 'author-tag';
+                  tag.contentEditable = 'false';
+                  tag.dataset.testid = 'author-tag';
+                  tag.textContent = locked ? `${who.name} · locked` : who.name;
+                  tag.addEventListener('mousedown', (e) => e.preventDefault());
+                  tag.addEventListener('click', () => opts.onOpenAuthor(authorId));
+                  return tag;
+                }, { side: -1, key: `tag:${authorId}:${who.name}:${who.color}:${locked}` }),
               );
             });
             return DecorationSet.create(state.doc, decorations);

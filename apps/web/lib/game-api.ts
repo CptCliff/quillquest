@@ -3,7 +3,7 @@ import type { Character, ConcessionKind, DiceView, OutcomePrompt, PublicCard } f
 export type LedgerCard = PublicCard & { seq: number };
 
 export class ApiFailure extends Error {
-  constructor(message: string, public code: string) {
+  constructor(message: string, public code: string, public status = 0) {
     super(message);
   }
 }
@@ -24,19 +24,48 @@ export type CardPatchBody = Partial<{
   skillName: string; gmMarkedBig: boolean;
 }>;
 
-/** The game API, reached through the Next rewrite. The dev token is the bearer; the server reads the role from it. */
-export class GameApi {
-  constructor(private campaign: string, private token: string) {}
+export type TokenSource = () => Promise<string>;
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`/api/campaigns/${encodeURIComponent(this.campaign)}${path}`, {
+/** JSON calls to the sync server through the Next rewrite, with a fresh bearer token each time. */
+export class ApiClient {
+  constructor(private getToken: TokenSource) {}
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await fetch(path, {
       method,
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${await this.getToken()}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw new ApiFailure(json?.error?.message ?? 'Something went wrong', json?.error?.code ?? 'ERROR');
+    if (!res.ok) throw new ApiFailure(json?.error?.message ?? 'Something went wrong', json?.error?.code ?? 'ERROR', res.status);
     return json as T;
+  }
+}
+
+export interface Profile { userId: string; displayName: string; preferredColor: string | null }
+export interface CampaignSummary { id: string; title: string; role: 'gm' | 'player'; color: string; left: boolean }
+export interface MemberInfo { userId: string; displayName: string; color: string; role: 'gm' | 'player'; left: boolean }
+export interface InviteInfo { id: string; createdAt: string; expiresAt: string; status: 'open' | 'used' | 'revoked' | 'expired'; acceptedBy: string | null }
+
+/** Accounts: profile, campaigns, invites. Everything before (and around) a particular campaign. */
+export class AccountApi {
+  constructor(private api: ApiClient) {}
+  me = () => this.api.request<{ userId: string; email: string | null; profile: Profile; campaigns: CampaignSummary[] }>('GET', '/api/me');
+  saveProfile = (displayName: string, preferredColor?: string) => this.api.request<{ profile: Profile }>('PUT', '/api/me/profile', { displayName, preferredColor });
+  createCampaign = (title: string) => this.api.request<{ campaign: { id: string; title: string } }>('POST', '/api/campaigns', { title });
+  acceptInvite = (token: string) => this.api.request<{ campaignId: string; status: 'joined' | 'already-member' }>('POST', '/api/invites/accept', { token });
+  members = (campaign: string) => this.api.request<{ members: MemberInfo[] }>('GET', `/api/campaigns/${campaign}/members`);
+  invites = (campaign: string) => this.api.request<{ invites: InviteInfo[] }>('GET', `/api/campaigns/${campaign}/invites`);
+  createInvite = (campaign: string) => this.api.request<{ invite: { id: string; token: string; expiresAt: string } }>('POST', `/api/campaigns/${campaign}/invites`);
+  revokeInvite = (campaign: string, id: string) => this.api.request<{ revoked: true }>('DELETE', `/api/campaigns/${campaign}/invites/${id}`);
+  leave = (campaign: string) => this.api.request<{ left: true }>('POST', `/api/campaigns/${campaign}/leave`);
+}
+
+/** The game API for one campaign. */
+export class GameApi {
+  constructor(private campaign: string, private client: ApiClient) {}
+
+  private call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.client.request<T>(method, `/api/campaigns/${encodeURIComponent(this.campaign)}${path}`, body);
   }
 
   me = () => this.call<{ character: Character | null }>('GET', '/me');

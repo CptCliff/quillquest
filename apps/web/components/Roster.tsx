@@ -1,12 +1,9 @@
 'use client';
 import { useState } from 'react';
 import type { Character } from '@quillquest/rules';
-import { ApiFailure, type GameApi } from '../lib/game-api';
+import { ApiFailure, type AccountApi, type GameApi } from '../lib/game-api';
+import { SheetBody, Tokens } from './Sheet';
 import type { Me } from './StoryEditor';
-
-function Tokens({ n }: { n: number }) {
-  return <span aria-label={`${n} Conviction`} data-testid="conviction">{'●'.repeat(n)}{'○'.repeat(Math.max(0, 3 - n))}</span>;
-}
 
 function LayDown({ character, burdenId, api, onNotice }: { character: Character; burdenId: string; api: GameApi; onNotice: (m: string) => void }) {
   const [kind, setKind] = useState<'trait' | 'beliefRewrite'>('trait');
@@ -26,32 +23,29 @@ function LayDown({ character, burdenId, api, onNotice }: { character: Character;
 }
 
 /** Open table: everyone sees every player character's full sheet (design plan 5.4). */
-export function Roster({ characters, me, api, onNotice }: { characters: Record<string, Character>; me: Me; api: GameApi; onNotice: (m: string) => void }) {
+export function Roster({ characters, me, api, accounts, campaign, onNotice, onSkill, onLeft, focus }: {
+  characters: Record<string, Character>; me: Me; api: GameApi; accounts: AccountApi; campaign: string;
+  onNotice: (m: string) => void; onSkill: (characterId: string, skill: string) => void; onLeft: () => void; focus?: string | null;
+}) {
   const list = Object.values(characters);
-  if (list.length === 0) return <p className="muted">No characters yet.</p>;
+  const leave = () => {
+    if (!window.confirm('Leave this campaign? You will still be able to read the story, but not write in it.')) return;
+    accounts.leave(campaign).then(onLeft, (e) => onNotice(e instanceof ApiFailure ? e.message : 'Something went wrong'));
+  };
   return (
     <section aria-label="Roster" data-testid="roster">
+      {list.length === 0 && <p className="muted">No characters yet.</p>}
       {list.map((c) => {
-        const mine = c.id === `${me.id}-pc`;
-        const burdens = c.burdens.filter((b) => b.status === 'active');
+        const mine = c.ownerId === me.id;
         return (
-          <article key={c.id} className="sheet" data-testid="sheet" data-character={c.id}>
-            <h3>{c.name} <Tokens n={c.conviction} /></h3>
-            <div><strong>Skills</strong>: {c.skills.map((s) => `${s.name} ${s.rank}`).join(' · ') || 'none'}</div>
-            <div><strong>Beliefs</strong>: <ul>{c.beliefs.map((b) => <li key={b.id}>{b.isCore ? 'Core: ' : ''}{b.text}</li>)}</ul></div>
-            {c.traits.length > 0 && <div><strong>Traits</strong>: {c.traits.map((t) => t.text).join(' · ')}</div>}
-            {c.possessions.length > 0 && <div><strong>Possessions</strong>: {c.possessions.map((p) => p.name).join(' · ')}</div>}
-            <div data-testid="wounds"><strong>Wounds</strong>: {c.wounds.length ? c.wounds.map((w) => `${w.name} (${w.level})`).join(' · ') : 'none'}{c.collapsed ? ' · Collapsed' : ''}</div>
-            <div data-testid="burdens"><strong>Burdens</strong>: {burdens.length ? '' : 'none'}</div>
-            {burdens.map((b) => (
-              <div key={b.id} className="burden" data-testid="burden">
-                <span>{b.name}</span>
-                {(mine || me.role === 'gm') && <LayDown character={c} burdenId={b.id} api={api} onNotice={onNotice} />}
-              </div>
-            ))}
+          <article key={c.id} className={`sheet${focus === c.id ? ' focus' : ''}`} data-testid="sheet" data-character={c.id} ref={(el) => { if (el && focus === c.id) el.scrollIntoView({ block: 'nearest' }); }}>
+            <h3>{c.name}{c.left ? ' (left)' : ''} <Tokens n={c.conviction} /></h3>
+            <SheetBody c={c} onSkill={(s) => onSkill(c.id, s)}
+              burdenExtra={mine || me.role === 'gm' ? (id) => <LayDown character={c} burdenId={id} api={api} onNotice={onNotice} /> : undefined} />
           </article>
         );
       })}
+      {me.role !== 'gm' && !me.left && <button type="button" data-testid="leave" onClick={leave}>Leave this campaign</button>}
     </section>
   );
 }

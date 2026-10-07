@@ -1,64 +1,83 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
-import type { Editor } from '@tiptap/core';
-import { StoryEditor, type Me } from './StoryEditor';
-import { NotesPane } from './NotesPane';
+import { AccountApi, ApiClient, ApiFailure, GameApi } from '../lib/game-api';
+import { useSession } from '../lib/session';
+import { SignIn } from './SignIn';
+import type { Me } from './StoryEditor';
+import { Table } from './Table';
 
 const REJECTED_PREFIX = 'rejected:';
-const SPLIT_KEY = 'qq.split';
+const SYNC_URL = process.env.NEXT_PUBLIC_SYNC_URL ?? 'ws://localhost:1234';
 
-interface Connection { doc: Y.Doc; provider: HocuspocusProvider; me: Me; token: string }
+interface Connection { doc: Y.Doc; provider: HocuspocusProvider }
 
-function loadSplit(): number {
-  try {
-    const v = Number(localStorage.getItem(SPLIT_KEY));
-    return v >= 25 && v <= 80 ? v : 62;
-  } catch { return 62; }
-}
+/**
+ * Gets you to the table: signed in, a member of this campaign, then a live connection. The role and ink come from your
+ * membership, which the server decides; this only shows what it says.
+ */
+export function Workspace({ campaign }: { campaign: string }) {
+  const session = useSession();
+  const client = useMemo(() => new ApiClient(session.getToken), [session.getToken]);
+  const accounts = useMemo(() => new AccountApi(client), [client]);
+  const game = useMemo(() => new GameApi(campaign, client), [campaign, client]);
+  const signedIn = session.state.status === 'in';
+  const userId = session.state.status === 'in' ? session.state.userId : null;
 
-export function Workspace({ campaign, userId }: { campaign: string; userId: string }) {
+  const [me, setMe] = useState<Me | null>(null);
+  const [title, setTitle] = useState('');
+  const [gate, setGate] = useState<'checking' | 'denied' | 'error'>('checking');
   const [conn, setConn] = useState<Connection | null>(null);
   const [epoch, setEpoch] = useState(0);
   const [status, setStatus] = useState('connecting');
   const [notice, setNotice] = useState<string | null>(null);
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [split, setSplit] = useState(62);
-  const [tab, setTab] = useState<'story' | 'notes'>('story');
   const [peers, setPeers] = useState<{ key: number; name: string; color: string }[]>([]);
-  const dragging = useRef(false);
+  const resets = useRef<number[]>([]);
 
-  useEffect(() => setSplit(loadSplit()), []);
-
-  // One connection per (campaign, user, epoch). A rejected update bumps the epoch, which rebuilds everything from the server's copy.
+  // Who am I in this campaign? 403 means I am not a member.
   useEffect(() => {
+    if (!signedIn || !userId) return;
+    let live = true;
+    Promise.all([accounts.members(campaign), accounts.me()]).then(([m, mine]) => {
+      if (!live) return;
+      const row = m.members.find((x) => x.userId === userId);
+      if (!row) return setGate('denied');
+      setTitle(mine.campaigns.find((c) => c.id === campaign)?.title ?? '');
+      setMe({ id: row.userId, name: row.displayName, color: row.color, role: row.role, left: row.left });
+    }, (e) => live && setGate(e instanceof ApiFailure && e.status === 403 ? 'denied' : 'error'));
+    return () => { live = false; };
+  }, [signedIn, userId, accounts, campaign, epoch]);
+
+  // One connection per (campaign, member, epoch). A rejected update bumps the epoch and rebuilds from the server's copy.
+  useEffect(() => {
+    if (!me) return;
     let alive = true;
     const doc = new Y.Doc();
-    let provider: HocuspocusProvider | null = null;
-    (async () => {
-      const res = await fetch(`/api/dev-token?user=${encodeURIComponent(userId)}`);
-      if (!res.ok || !alive) return setStatus('sign-in failed');
-      const { identity, token, syncUrl } = await res.json();
-      provider = new HocuspocusProvider({
-        url: syncUrl, name: campaign, document: doc, token,
-        onStatus: ({ status }) => alive && setStatus(status),
-        onAuthenticationFailed: () => alive && setStatus('sign-in failed'),
-        onClose: ({ event }) => {
-          if (alive && event.reason?.startsWith(REJECTED_PREFIX)) {
-            setNotice('The server refused one of your edits, so your copy was refreshed from the table.');
-            setEpoch((e) => e + 1);
-          }
-        },
-      });
-      // Everyone present, including this tab: awareness is keyed by client, and the local state carries no id.
-      const track = () => alive && setPeers([...(provider!.awareness?.getStates().entries() ?? [])].flatMap(([key, s]) => (s.user?.name ? [{ key, name: s.user.name, color: s.user.color }] : [])));
-      provider.awareness?.on('change', track);
-      track();
-      if (alive) setConn({ doc, provider, me: identity, token });
-    })();
-    return () => { alive = false; provider?.destroy(); doc.destroy(); setConn(null); setEditor(null); };
-  }, [campaign, userId, epoch]);
+    const provider = new HocuspocusProvider({
+      url: SYNC_URL, name: campaign, document: doc, token: () => session.getToken(),
+      onStatus: ({ status }) => alive && setStatus(status),
+      onAuthenticationFailed: () => alive && setGate('denied'),
+      onClose: ({ event }) => {
+        if (alive && event.reason === 'membership-changed') { setEpoch((e) => e + 1); return; } // you left: reload who you are, reconnect read-only
+        if (alive && event.reason?.startsWith(REJECTED_PREFIX)) {
+          // Rebuild from the server's copy, but never in a tight loop: three resets within ten seconds means something is wrong.
+          const now = Date.now();
+          resets.current = [...resets.current.filter((t) => now - t < 10_000), now];
+          if (resets.current.length > 3) { setStatus('disconnected'); setNotice('Your connection keeps being refused. Reload the page; if it persists, tell your GM.'); return; }
+          setNotice('The server refused one of your edits, so your copy was refreshed from the table.');
+          setEpoch((e) => e + 1);
+        }
+      },
+    });
+    const track = () => alive && setPeers([...(provider.awareness?.getStates().entries() ?? [])].flatMap(([key, s]) => (s.user?.name ? [{ key, name: s.user.name, color: s.user.color }] : [])));
+    provider.awareness?.on('change', track);
+    track();
+    setConn({ doc, provider });
+    return () => { alive = false; provider.destroy(); doc.destroy(); setConn(null); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id, campaign, epoch]);
 
   useEffect(() => {
     if (!notice) return;
@@ -66,46 +85,11 @@ export function Workspace({ campaign, userId }: { campaign: string; userId: stri
     return () => clearTimeout(t);
   }, [notice]);
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const main = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setSplit(Math.min(80, Math.max(25, ((e.clientX - main.left) / main.width) * 100)));
-  }, []);
-  const endDrag = () => {
-    dragging.current = false;
-    try { localStorage.setItem(SPLIT_KEY, String(split)); } catch { /* remembered widths are a nicety */ }
-  };
-
-  return (
-    <div className="app" data-testid="workspace" data-status={status}>
-      <header>
-        <strong>Quillquest</strong>
-        <span className="muted">{campaign}</span>
-        {conn && <span className="pill" data-testid="me" style={{ background: conn.me.color }}>{conn.me.name}{conn.me.role === 'gm' ? ' · GM' : ''}</span>}
-        <span className="muted" data-testid="status">{status}</span>
-        <span className="peers" data-testid="peers">
-          {peers.map((p) => <span key={p.key} className="dot" title={p.name} style={{ background: p.color }} />)}
-        </span>
-      </header>
-      {notice && <div role="status" className="notice" data-testid="notice">{notice}</div>}
-      <nav className="tabs" aria-label="Panes">
-        <button aria-pressed={tab === 'story'} onClick={() => setTab('story')}>Story</button>
-        <button aria-pressed={tab === 'notes'} onClick={() => setTab('notes')}>Notes</button>
-      </nav>
-      <main data-tab={tab} style={{ ['--split' as string]: `${split}%` }} onPointerMove={onPointerMove} onPointerUp={endDrag}>
-        <section className="story-pane" aria-label="Story pane">
-          {conn ? (
-            <StoryEditor key={`${conn.me.id}-${epoch}`} doc={conn.doc} provider={conn.provider} me={conn.me} onEditor={setEditor} onNotice={setNotice} />
-          ) : (
-            <p className="muted">Connecting…</p>
-          )}
-        </section>
-        <div className="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" data-testid="divider"
-          onPointerDown={(e) => { dragging.current = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }} />
-        <section className="notes-pane" aria-label="Notes pane">
-          {conn && <NotesPane key={`${conn.me.id}-${epoch}`} doc={conn.doc} me={conn.me} token={conn.token} campaign={campaign} editor={editor} onNotice={setNotice} />}
-        </section>
-      </main>
-    </div>
-  );
+  if (session.state.status === 'loading') return <main className="home"><p className="muted">Loading…</p></main>;
+  if (!signedIn) return <main className="home"><SignIn heading="Sign in to join the table" /></main>;
+  if (gate === 'denied') return <main className="home" data-testid="denied"><h1>Not your table</h1><p>You are not a member of this campaign. Ask its GM for an invite link.</p><Link href="/">Your campaigns</Link></main>;
+  if (gate === 'error') return <main className="home"><p role="alert" className="notice">Could not open this campaign. Try again in a moment.</p><Link href="/">Your campaigns</Link></main>;
+  if (!me || !conn) return <main className="home"><p className="muted">Connecting…</p></main>;
+  return <Table key={`${me.id}-${epoch}`} doc={conn.doc} provider={conn.provider} me={me} title={title} campaign={campaign} status={status}
+    peers={peers} game={game} accounts={accounts} onNotice={setNotice} notice={notice} />;
 }

@@ -4,7 +4,7 @@ import * as Y from 'yjs';
 import { createDb, migrate, type Db } from '@quillquest/db';
 import { pgliteSql } from '@quillquest/db/pglite';
 import type { Identity } from '../src/auth';
-import { createSyncServer, REJECTED_PREFIX } from '../src/server';
+import { createSyncServer, MEMBERSHIP_CHANGED, REJECTED_PREFIX } from '../src/server';
 import { PgDocumentStore } from '../src/game/pg-stores';
 import { addParagraph, api, attrs, connect, para, SECRET, textOf, waitFor } from './helpers';
 
@@ -177,6 +177,21 @@ describe('leaving', () => {
     (para(gone.fragment, 0).get(0) as Y.XmlText).insert(0, 'Sneaky. ');
     await new Promise((r) => setTimeout(r, 300));
     expect(textOf(para(sella.fragment, 0))).toBe('Before I left.');
+  });
+  it('leaving cuts the member\'s live connection at once, so they cannot keep writing on the socket they already had', async () => {
+    const t = await table(ILSE, SELLA);
+    const ilse = track(await connect(t.ws, ILSE, t.id));
+    const sella = track(await connect(t.ws, SELLA, t.id));
+    addParagraph(ilse.fragment, attrs('p1', 'ilse'), 'Before.');
+    await waitFor(() => sella.fragment.length === 1);
+    await call(t, ILSE, 'POST', `/api/campaigns/${t.id}/leave`);
+    await waitFor(() => ilse.closes.some((c) => c.reason === MEMBERSHIP_CHANGED));
+    expect(sella.closes).toEqual([]); // nobody else is disturbed
+    // Her provider reconnects as a read-only member; a write after that changes nothing for anyone else.
+    await new Promise((r) => setTimeout(r, 1500)); // the provider reconnects on its own
+    (para(ilse.fragment, 0).get(0) as Y.XmlText).insert(0, 'Late. ');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(textOf(para(sella.fragment, 0))).toBe('Before.');
   });
   it('the GM cannot leave; a non-member cannot; a former member rejoins with a new invite', async () => {
     const t = await table(ILSE);

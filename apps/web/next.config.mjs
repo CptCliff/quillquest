@@ -8,6 +8,9 @@ export default {
   // The game API lives in the sync server; proxying it keeps the browser on one origin (no CORS).
   async rewrites() {
     return [
+      { source: '/api/me', destination: `${SYNC_HTTP}/api/me` },
+      { source: '/api/me/:path*', destination: `${SYNC_HTTP}/api/me/:path*` },
+      { source: '/api/invites/:path*', destination: `${SYNC_HTTP}/api/invites/:path*` },
       { source: '/api/campaigns/:path*', destination: `${SYNC_HTTP}/api/campaigns/:path*` },
       { source: '/api/dev/:path*', destination: `${SYNC_HTTP}/api/dev/:path*` },
     ];

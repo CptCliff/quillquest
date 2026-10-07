@@ -29,7 +29,8 @@
     "@tiptap/extension-paragraph": "3.31.4",
     "@tiptap/extension-text": "3.31.4",
     "@quillquest/sync": "workspace:*",
-    "@quillquest/rules": "workspace:*"
+    "@quillquest/rules": "workspace:*",
+    "@supabase/supabase-js": "2.117.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

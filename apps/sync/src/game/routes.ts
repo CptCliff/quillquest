@@ -17,6 +17,8 @@ export interface RouteOptions {
   /** Present when accounts are backed by Postgres; the account and invite routes need it. */
   db?: Db;
   devDice: boolean;
+  /** Called when someone's membership changes while they may be connected (they left), so their live sockets can be dropped. */
+  onMembershipChange?: (campaign: string, userId: string) => void;
 }
 
 const CAMPAIGN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -139,6 +141,7 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
     if (rest[0] === 'leave' && method === 'POST') {
       await needDb(o).leave(campaign, actor.id);
       await svc.onLeave(campaign, actor);
+      o.onMembershipChange?.(campaign, actor.id);
       return ok({ left: true });
     }
     if (rest[0] === 'invites') {

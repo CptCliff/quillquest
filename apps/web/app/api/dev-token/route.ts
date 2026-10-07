@@ -3,7 +3,8 @@ import { DEV_USERS } from '../../../lib/dev-users';
 
 /** Dev only: mints a signed identity for one of the preset users. M4 replaces this with real sign-in. */
 export async function GET(req: Request) {
-  if (process.env.NODE_ENV === 'production') return new Response('not available', { status: 404 });
+  // Dev only, and only when explicitly switched on: anyone holding this secret could mint a token for any user.
+  if (process.env.NODE_ENV === 'production' || process.env.QUILLQUEST_DEV_AUTH !== '1') return new Response('not available', { status: 404 });
   const user = DEV_USERS.find((u) => u.id === new URL(req.url).searchParams.get('user'));
   if (!user) return new Response('unknown user', { status: 400 });
   const secret = process.env.QUILLQUEST_DEV_SECRET ?? 'dev-secret';

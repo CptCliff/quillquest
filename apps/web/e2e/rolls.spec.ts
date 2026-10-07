@@ -1,17 +1,6 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { createTable, join } from './helpers';
 
-let table = 0;
-const newTable = () => `roll-${Date.now()}-${++table}`;
-
-async function join(browser: Browser, campaign: string, user: string): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
-  await page.goto(`/story/${campaign}?as=${user}`);
-  await expect(page.getByTestId('workspace')).toHaveAttribute('data-status', 'connected');
-  await expect(page.getByTestId('story')).toBeVisible();
-  await expect(page.getByTestId('ledger')).toBeVisible();
-  return page;
-}
 /** Queue the next dice for a campaign (dev route, mounted only when the sync server runs with QUILLQUEST_DEV_DICE=1). */
 const queueDice = (campaign: string, values: number[]) =>
   fetch(`http://localhost:3100/api/dev/campaigns/${campaign}/dice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
@@ -38,7 +27,7 @@ async function fillQuick(page: Page, over: { difficulty?: string; danger?: strin
 const locked = (p: Page, n: number) => expect(paragraphs(p).nth(n)).toHaveClass(/is-locked/);
 
 test('a quick roll runs end to end: roll, outcome prompt, hidden dice, reveal, write, lock', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const ilse = await join(browser, t, 'ilse');
   const sella = await join(browser, t, 'sella');
 
@@ -87,7 +76,7 @@ test('a quick roll runs end to end: roll, outcome prompt, hidden dice, reveal, w
 });
 
 test('a big roll: a Belief on the line, the GM sets it, a failed goal is pushed, and a Burden is named', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse']);
   const ilse = await join(browser, t, 'ilse');
   const gm = await join(browser, t, 'gm1');
   await write(ilse, 'Ilse slips toward the duke\'s door, torn between the oath and the letters.', true);
@@ -149,7 +138,7 @@ test('a big roll: a Belief on the line, the GM sets it, a failed goal is pushed,
 });
 
 test('conceding ends the card, and the defeat is written and locked', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse']);
   const ilse = await join(browser, t, 'ilse');
   await write(ilse, 'I stare up at the wall.', true);
   await ilse.getByTestId('new-roll-open').click();
@@ -164,7 +153,7 @@ test('conceding ends the card, and the defeat is written and locked', async ({ b
 });
 
 test('the GM can retcon a quick roll until a later post builds on it', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const ilse = await join(browser, t, 'ilse');
   const sella = await join(browser, t, 'sella');
   const gm = await join(browser, t, 'gm1');

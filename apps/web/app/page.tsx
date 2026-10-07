@@ -1,21 +1,11 @@
-import Link from 'next/link';
-import { DEV_USERS } from '../lib/dev-users';
+'use client';
+import { Dashboard } from '../components/Dashboard';
+import { SignIn } from '../components/SignIn';
+import { useSession } from '../lib/session';
 
 export default function Home() {
-  return (
-    <main className="home">
-      <h1>Quillquest</h1>
-      <p>Dev sign-in. Open the same table in two windows as two different people.</p>
-      <ul>
-        {DEV_USERS.map((u) => (
-          <li key={u.id}>
-            <Link href={`/story/table-1?as=${u.id}`} style={{ color: u.color }}>
-              {u.name}
-            </Link>{' '}
-            <small>({u.role})</small>
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
+  const { state } = useSession();
+  if (state.status === 'loading') return <main className="home"><p className="muted">Loading…</p></main>;
+  if (state.status === 'out') return <main className="home"><SignIn /></main>;
+  return <Dashboard />;
 }

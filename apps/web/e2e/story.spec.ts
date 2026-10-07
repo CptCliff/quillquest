@@ -1,22 +1,12 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { createTable, join } from './helpers';
 
-let table = 0;
-const newTable = () => `e2e-${Date.now()}-${++table}`;
-
-async function join(browser: Browser, campaign: string, user: string, viewport = { width: 1280, height: 800 }): Promise<Page> {
-  const ctx = await browser.newContext({ viewport });
-  const page = await ctx.newPage();
-  await page.goto(`/story/${campaign}?as=${user}`);
-  await expect(page.getByTestId('workspace')).toHaveAttribute('data-status', 'connected');
-  await expect(page.getByTestId('story')).toBeVisible();
-  return page;
-}
 const paragraphs = (p: Page) => p.locator('.story p');
 /** A paragraph's text without remote carets, whose name labels are rendered inside the text. */
 const textOf = (p: Page, i: number) =>
   paragraphs(p).nth(i).evaluate((el) => {
     const copy = el.cloneNode(true) as HTMLElement;
-    copy.querySelectorAll('.collaboration-carets__caret').forEach((n) => n.remove());
+    copy.querySelectorAll('.collaboration-carets__caret, .author-tag, .skill-chip').forEach((n) => n.remove());
     return copy.textContent ?? '';
   });
 const ink = (p: Page, i: number) => paragraphs(p).nth(i).evaluate((el) => getComputedStyle(el).getPropertyValue('--ink').trim());
@@ -29,7 +19,7 @@ async function typeIn(page: Page, paragraph: number, text: string) {
 }
 
 test('two writers co-write with distinct colors and live cursors', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const ilse = await join(browser, t, 'ilse');
   const sella = await join(browser, t, 'sella');
 
@@ -56,7 +46,7 @@ test('two writers co-write with distinct colors and live cursors', async ({ brow
 });
 
 test('another writer\'s edit becomes a suggestion that the author can accept or reject', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const ilse = await join(browser, t, 'ilse');
   const sella = await join(browser, t, 'sella');
   await paragraphs(ilse).first().click();
@@ -83,11 +73,11 @@ test('another writer\'s edit becomes a suggestion that the author can accept or 
   await ilse.getByTestId('suggestion-reject').click();
   await expect(ilse.locator('.story ins')).toHaveCount(0);
   await expect(paragraphs(sella).first()).not.toContainText('Loudly');
-  await expect(paragraphs(ilse).first()).toHaveText(/I climb the wall\. Quietly\./);
+  expect(await textOf(ilse, 0)).toBe('I climb the wall. Quietly.');
 });
 
 test('suggesting a deletion marks the text without removing it', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const ilse = await join(browser, t, 'ilse');
   const sella = await join(browser, t, 'sella');
   await paragraphs(ilse).first().click();
@@ -101,7 +91,7 @@ test('suggesting a deletion marks the text without removing it', async ({ browse
 });
 
 test('only the GM sees the Director tab, and the GM opens no cards', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse']);
   const ilse = await join(browser, t, 'ilse');
   const gm = await join(browser, t, 'gm1');
   await expect(ilse.getByTestId('tab-director')).toHaveCount(0);
@@ -111,7 +101,7 @@ test('only the GM sees the Director tab, and the GM opens no cards', async ({ br
 });
 
 test('the panes resize, remember their width, and stack as tabs on a phone', async ({ browser }) => {
-  const t = newTable();
+  const t = await createTable(['ilse', 'sella']);
   const page = await join(browser, t, 'ilse');
   const divider = page.getByTestId('divider');
   const box = (await divider.boundingBox())!;

@@ -30,9 +30,7 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--split
 
 .story { outline: none; min-height: 240px; }
 .story p { margin: 0 0 14px; padding: 2px 0 2px 14px; border-left: 3px solid var(--ink, var(--line)); position: relative; }
-.story p::before { content: attr(data-author-name); display: block; font: 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); }
 .story p.is-locked { background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in srgb, var(--ink) 8%, transparent) 8px 16px); cursor: not-allowed; }
-.story p.is-locked::before { content: attr(data-author-name) ' · locked'; }
 .story ins { background: var(--ins-bg); color: var(--ins-fg); text-decoration: underline; }
 .story del { background: var(--del-bg); color: var(--del-fg); }
 .new-post { margin-top: 8px; }
@@ -86,3 +84,30 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .sheet h3 { margin: 0 0 6px; }
 .sheet ul { margin: 2px 0; padding-left: 18px; }
 .burden { display: grid; gap: 4px; padding: 4px 0; }
+
+/* Sign-in, dashboard, join */
+.signin { display: grid; gap: 10px; }
+.dev-signin ul { list-style: none; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.dev-signin button { border-width: 2px; }
+.campaigns { list-style: none; padding: 0; display: grid; gap: 6px; }
+.home h1 { margin-bottom: 8px; }
+.home .row { margin-bottom: 8px; align-items: flex-end; }
+.members, .invites { list-style: none; padding: 0; display: grid; gap: 6px; }
+a { color: inherit; }
+.linklike { background: none; border: none; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; cursor: pointer; }
+
+/* Author tags and Skill chips in the story */
+.story .author-tag { display: block; font: 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+.skill-chip { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; vertical-align: baseline; user-select: none; font: 12px system-ui, sans-serif; border: 1px solid var(--ink, var(--fg)); border-radius: 999px; background: var(--panel); }
+.skill-chip button { font: inherit; font-size: 12px; border: none; background: none; padding: 1px 8px; cursor: pointer; color: var(--fg); }
+.skill-chip .chip-main { font-weight: 600; }
+.skill-chip .chip-x { padding: 1px 6px; color: var(--muted); }
+
+/* Info cards: beside the text on a computer (top of the Notes pane), a bottom sheet on a phone */
+.infocard { background: var(--bg); border: 1px solid var(--fg); border-radius: 10px; padding: 12px; margin-bottom: 14px; font-family: system-ui, sans-serif; font-size: 14px; }
+.infocard header { display: flex; align-items: center; gap: 8px; justify-content: space-between; margin-bottom: 6px; }
+.infocard ul { margin: 4px 0; padding-left: 18px; }
+.sheet.focus { border-color: var(--fg); }
+@media (max-width: 760px) {
+  .infocard { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; margin: 0; border-radius: 14px 14px 0 0; max-height: 60dvh; overflow: auto; box-shadow: 0 -8px 24px rgba(0, 0, 0, .25); }
+}

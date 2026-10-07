@@ -7,7 +7,7 @@ import { DANGER_LABELS, OUTCOME_LABELS, STATUS_LABELS, THREATS } from '../lib/wo
 import type { Me } from './StoryEditor';
 
 type Notice = (message: string) => void;
-interface Env { api: GameApi; me: Me; characters: Record<string, Character>; editor: Editor | null; onNotice: Notice }
+interface Env { api: GameApi; me: Me; characters: Record<string, Character>; editor: Editor | null; onNotice: Notice; openCharacter: (characterId: string) => void }
 
 const nameOf = (characters: Record<string, Character>, id: string | null) => (id ? characters[id]?.name ?? id : '');
 
@@ -271,7 +271,7 @@ function ActiveCard({ card, env }: { card: LedgerCard; env: Env }) {
   return (
     <article className="card" data-testid="card" data-status={card.status} data-speed={card.speed}>
       <header>
-        <strong>{nameOf(characters, card.characterId)}</strong> · {card.skillName} <span className="badge" data-testid="card-speed">{card.speed === 'big' ? 'Big roll' : 'Quick roll'}</span>{' '}
+        <button type="button" className="linklike" data-testid="card-name" onClick={() => env.openCharacter(card.characterId)}><strong>{nameOf(characters, card.characterId)}</strong></button> · {card.skillName} <span className="badge" data-testid="card-speed">{card.speed === 'big' ? 'Big roll' : 'Quick roll'}</span>{' '}
         <span className="badge" data-testid="card-status">{STATUS_LABELS[card.status]}</span>
       </header>
       {card.status === 'draft' && <DraftForm card={card} env={env} />}
