@@ -38,7 +38,7 @@ export function NotesPanel({ panel: tab, cards, characters, me, game, accounts, 
       {tab === 'ledger' && (
         <>
           <Battles battles={zero.battles} characters={characters} me={me} game={game} onNotice={onNotice} />
-          <Ledger cards={cards} character={me.left ? null : mine} env={{ api: game, me, characters, editor, onNotice, openCharacter }} />
+          <Ledger cards={cards} character={me.left ? null : mine} env={{ api: game, me, characters, editor, onNotice, openCharacter, phase: zero.phase }} />
           {editor && <SuggestionsPanel editor={editor} userId={me.id} />}
         </>
       )}

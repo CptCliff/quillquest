@@ -19,7 +19,7 @@ const GM_NOTES = 'SENTINEL-gm-notes-1177';
 
 async function table(withLlm = true) {
   const fake = new FakeProvider();
-  const s = await startServer(new MemoryStore(), { devDice: true }, withLlm ? fake : null);
+  const s = await startServer(new MemoryStore(), { devDice: true, playing: true }, withLlm ? fake : null);
   track({ destroy: () => s.server.destroy() });
   const gm = track(await connect(s.url, GM));
   const ilse = track(await connect(s.url, ILSE));

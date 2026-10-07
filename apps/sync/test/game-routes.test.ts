@@ -14,7 +14,7 @@ const DICE_KEYS = ['skillDie', 'backingDie', 'difficultyDie', 'kept', '"hits"', 
 const noDice = (v: unknown) => { const s = typeof v === 'string' ? v : JSON.stringify(v); for (const k of DICE_KEYS) expect(s, k).not.toContain(k); };
 
 async function table() {
-  const s = await startServer();
+  const s = await startServer(new MemoryStore(), { devDice: true, playing: true });
   track({ destroy: () => s.server.destroy() });
   const ilse = track(await connect(s.url, ILSE));
   const gm = track(await connect(s.url, GM));

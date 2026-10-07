@@ -174,6 +174,7 @@ export class GameService {
   createCard(campaign: string, actor: Identity, input: CreateCardInput): Promise<PublicCard> {
     return this.mutate(campaign, actor, async (s) => {
       if (actor.role === 'gm') throw new GameError(403, 'GM_HAS_NO_CHARACTER', 'Cards are opened by the acting player');
+      if (s.phase !== 'playing') throw new GameError(409, 'SESSION_ZERO', 'Rolls open when the GM begins play. Finish your character first.');
       const sheet = this.sheet(s, s.characterOf[actor.id]!);
       if (Object.values(s.cards).some((c) => c.actorId === actor.id && c.status === 'draft')) throw new GameError(409, 'DRAFT_OPEN', 'You already have an open card: finish it, or discard it, first');
       if (input.anchorParagraphId) {

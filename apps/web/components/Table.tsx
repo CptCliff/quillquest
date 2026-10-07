@@ -18,6 +18,7 @@ import { InfoCard, type OpenCard } from './InfoCard';
 import { NotesPanel, panelLabels, type ZeroState } from './NotesPane';
 import { SpotlightBar, type SpotlightState } from './SpotlightBar';
 import { StoryEditor, type Me } from './StoryEditor';
+import { Glossary } from './Glossary';
 import { ThemeToggle } from './ThemeToggle';
 
 const NOTES_PANELS: PanelId[] = ['ledger', 'create', 'codex', 'roster', 'director'];
@@ -174,6 +175,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
         <strong>{title || 'Quillquest'}</strong>
         <span className="pill" data-testid="me" style={{ background: me.color, color: readableOn(me.color) }}>{me.name}{me.role === 'gm' ? ' · GM' : ''}</span>
         <span className="muted" data-testid="status" role="status">{status}</span>
+        <Glossary />
         <ThemeToggle />
         {!phone && <LayoutMenu layout={layout} role={me.role} labels={labels} onChange={(fn, msg) => { update(fn); if (msg) announce(msg); }} onReset={() => { void reset(); announce('Layout reset to the default'); }} />}
         <span className="peers" data-testid="peers">{peers.map((p) => <span key={p.key} className="dot" title={p.name} style={{ background: p.color }} />)}</span>

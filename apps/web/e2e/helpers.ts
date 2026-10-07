@@ -15,7 +15,7 @@ export async function api(user: string, method: string, path: string, body?: unk
 
 let n = 0;
 /** A real campaign: gm1 creates it and each player joins by invite. Returns its id. */
-export async function createTable(players: string[], title = 'The Border War'): Promise<string> {
+export async function createTable(players: string[], title = 'The Border War', beginPlay = true): Promise<string> {
   const made = await api('gm1', 'POST', '/api/campaigns', { title: `${title} ${Date.now()}-${++n}` });
   expect(made.status).toBe(200);
   const id: string = made.json.campaign.id;
@@ -23,6 +23,12 @@ export async function createTable(players: string[], title = 'The Border War'): 
     const inv = await api('gm1', 'POST', `/api/campaigns/${id}/invites`);
     const acc = await api(p, 'POST', '/api/invites/accept', { token: inv.json.invite.token });
     expect(acc.status, `${p} joins`).toBe(200);
+  }
+  // A table of ready-made sheets (the preset dev users) starts in play; a table with blank characters stays in session zero.
+  const presets = ['ilse', 'sella', 'rook'];
+  if (beginPlay && players.length && players.every((p) => presets.includes(p))) {
+    for (const p of players) await api(p, 'GET', `/api/campaigns/${id}/me`);
+    expect((await api('gm1', 'POST', `/api/campaigns/${id}/creation/begin`, {})).status, 'begin play').toBe(200);
   }
   return id;
 }

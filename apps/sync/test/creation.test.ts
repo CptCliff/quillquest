@@ -16,8 +16,8 @@ const WREN: Identity = { id: 'wren', name: 'Wren', role: 'player', color: '#0e74
 const C = 'campaign-1';
 const base = `/api/campaigns/${C}`;
 
-async function table(players: Identity[] = [MIRA, TOBIN, WREN], llm: FakeProvider | null = null) {
-  const s = await startServer(new MemoryStore(), { devDice: true }, llm);
+async function table(players: Identity[] = [MIRA, TOBIN, WREN], llm: FakeProvider | null = null, playing = false) {
+  const s = await startServer(new MemoryStore(), { devDice: true, playing }, llm);
   track({ destroy: () => s.server.destroy() });
   const gm = track(await connect(s.url, GM));
   const clients: Record<string, Client> = {};
@@ -40,6 +40,12 @@ describe('a new player and the roll gate', () => {
     expect(t.gm.doc.getMap('characters').get('mira-pc')).toMatchObject({ name: 'Mira', ownerId: 'mira', skills: [] });
     expect(t.gm.doc.getMap('creation').get('mira-pc')).toMatchObject({ status: 'creating' });
     expect(t.gm.doc.getMap('campaign').get('phase')).toBe('sessionZero');
+    const early = await t.call(MIRA, 'POST', '/cards', { skillName: 'Climb' });
+    expect([early.status, early.json.error.code]).toEqual([409, 'SESSION_ZERO']); // no roll cards until the GM begins play
+  });
+  it('once play has begun, a late joiner still in creation can open a card but not roll it', async () => {
+    const t = await table([MIRA], null, true);
+    await waitFor(() => !!t.gm.doc.getMap('characters').get('mira-pc'));
     const card = await t.call(MIRA, 'POST', '/cards', { skillName: 'Climb' });
     expect(card.status).toBe(200); // writing a card is fine; rolling it is not
     const roll = await t.call(MIRA, 'POST', `/cards/${card.json.card.id}/roll`);

@@ -88,7 +88,9 @@ const safe = (c: string) => {
 
 export class MemoryGameStore implements GameStore {
   private states = new Map<string, GameState>();
-  async load(campaign: string) { return structuredClone(this.states.get(campaign) ?? emptyState()); }
+  /** Tests start tables already in play; a real table starts in session zero. */
+  constructor(private opts: { phase?: GameState['phase'] } = {}) {}
+  async load(campaign: string) { return structuredClone(this.states.get(campaign) ?? { ...emptyState(), phase: this.opts.phase ?? 'sessionZero' }); }
   async save(campaign: string, state: GameState) { this.states.set(campaign, structuredClone(state)); }
   async campaigns() { return [...this.states.keys()]; }
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { GameApi } from '../lib/game-api';
+import { Term } from './Term';
 import { useAct } from './Ledger';
 import type { Me } from './StoryEditor';
 
@@ -17,7 +18,7 @@ export function SpotlightBar({ spotlight, me, names, game, onNotice }: { spotlig
   const mayPass = !me.left && (me.role === 'gm' || spotlight.holder === me.id);
   return (
     <div className="spotlight" role="region" aria-label="Spotlight" data-testid="spotlight" data-mine={spotlight.holder === me.id}>
-      <span>Spotlight: <strong data-testid="spotlight-holder">{who(spotlight.holder)}</strong>{spotlight.holder === me.id ? ' — your turn to write' : ''}</span>
+      <span><Term k="spotlight">Spotlight</Term>: <strong data-testid="spotlight-holder">{who(spotlight.holder)}</strong>{spotlight.holder === me.id ? ' — your turn to write' : ''}</span>
       {spotlight.due && spotlight.due !== spotlight.holder && <span className="badge" data-testid="spotlight-due">{who(spotlight.due)} due the next post</span>}
       {mayPass && candidates.length > 0 && (
         <span className="row">

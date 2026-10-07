@@ -200,6 +200,8 @@ describe('leaving', () => {
     await call(t, ILSE, 'POST', `/api/campaigns/${t.id}/leave`);
     const inv = await call(t, GM, 'POST', `/api/campaigns/${t.id}/invites`);
     expect((await call(t, ILSE, 'POST', '/api/invites/accept', { token: inv.json.invite.token })).json.status).toBe('joined');
+    await call(t, ILSE, 'GET', `/api/campaigns/${t.id}/me`);
+    expect((await call(t, GM, 'POST', `/api/campaigns/${t.id}/creation/begin`, {})).status).toBe(200);
     expect((await call(t, ILSE, 'POST', `/api/campaigns/${t.id}/cards`, { skillName: 'Climb' })).status).toBe(200);
     const c = track(await connect(t.ws, ILSE, t.id));
     await waitFor(() => (c.doc.getMap('characters').get('ilse-pc') as { left?: boolean } | undefined)?.left === false);
@@ -217,6 +219,8 @@ describe('a roll in a real campaign, and what survives a restart', () => {
     const ilse = await connect(b1.ws, ILSE, id);
     addParagraph(ilse.fragment, attrs('p1', 'ilse'), 'I reach the wall.');
     await waitFor(() => b1.server.hocuspocus.getDocumentsCount() === 1);
+    await call(b1, ILSE, 'GET', `/api/campaigns/${id}/me`);
+    expect((await call(b1, GM, 'POST', `/api/campaigns/${id}/creation/begin`, {})).status).toBe(200); // rolls open when the GM begins play
     const card = await call(b1, ILSE, 'POST', `/api/campaigns/${id}/cards`, { skillName: 'Climb', anchorParagraphId: 'p1', want: 'Climb', risk: 'Fall' });
     expect(card.status).toBe(200);
     await new Promise((r) => setTimeout(r, 120));

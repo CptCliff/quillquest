@@ -203,3 +203,14 @@ a { color: inherit; }
 
 /* The theme button must never be squeezed out of the header row on a narrow screen. */
 .theme-toggle { flex: 0 0 auto; min-width: 2.25rem; min-height: 2.25rem; overflow: visible; }
+
+/* The glossary: tappable words in help text, and the dialog that lists them all. */
+.term { display: inline; }
+.term-word { all: unset; cursor: help; border-bottom: 1px dotted currentColor; color: inherit; }
+.term-word:focus-visible { outline: 2px solid var(--focus, currentColor); outline-offset: 2px; }
+.term-def { display: block; margin: var(--space-1) 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--line); background: var(--surface-sunken, transparent); font: var(--text-m) var(--font-ui); }
+.glossary-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: flex; align-items: flex-start; justify-content: center; padding: var(--space-4); overflow: auto; z-index: 50; }
+.glossary { background: var(--surface, Canvas); color: var(--text, CanvasText); max-width: 40rem; width: 100%; padding: var(--space-4); border-radius: var(--radius-m, 8px); border: 1px solid var(--line); }
+.glossary header { display: flex; justify-content: space-between; align-items: center; border: 0; padding: 0; }
+.glossary dt { font-weight: 600; margin-top: var(--space-2); }
+.glossary dd { margin: 0 0 var(--space-2); }

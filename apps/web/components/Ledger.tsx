@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { CONCESSION_KINDS, DANGER_RANKS, DIFFICULTY_RANKS, type Character, type ConcessionKind, type DiceView, type WoundLevel } from '@quillquest/rules';
 import { ApiFailure, type GameApi, type LedgerCard, type PromptInfo, type Preview } from '../lib/game-api';
+import { Term } from './Term';
 import { DANGER_LABELS, OUTCOME_LABELS, STATUS_LABELS, THREATS } from '../lib/words';
 import type { Me } from './StoryEditor';
 
 type Notice = (message: string) => void;
-interface Env { api: GameApi; me: Me; characters: Record<string, Character>; editor: Editor | null; onNotice: Notice; openCharacter: (characterId: string) => void }
+interface Env { phase?: string; api: GameApi; me: Me; characters: Record<string, Character>; editor: Editor | null; onNotice: Notice; openCharacter: (characterId: string) => void }
 
 const nameOf = (characters: Record<string, Character>, id: string | null) => (id ? characters[id]?.name ?? id : '');
 
@@ -190,7 +191,10 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
         )}
       </fieldset>
 
-      {preview?.odds && <div data-testid="odds">Goal: <strong>{preview.odds.goal}</strong> · Danger: <strong>{preview.odds.danger}</strong></div>}
+      <p className="muted" data-testid="draft-help">
+        {card.speed === 'big' ? <Term k="big">A big roll</Term> : <Term k="quick">A quick roll</Term>}: <Term k="drafting">still being written</Term>. Fill in <Term k="want">Want and Risk</Term>, then the <Term k="difficulty">Difficulty</Term> and the <Term k="danger">Danger</Term>; the GM can then <Term k="set">Set</Term> it.
+      </p>
+      {preview?.odds && <div data-testid="odds">Goal: <strong>{preview.odds.goal}</strong> · Danger: <strong>{preview.odds.danger}</strong> <Term k="odds">What are the odds?</Term></div>}
       {preview && preview.problems.length > 0 && <p className="muted" data-testid="problems">{preview.problems.join(' ')}</p>}
 
       <div className="actions">
@@ -201,6 +205,7 @@ function DraftForm({ card, env }: { card: LedgerCard; env: Env }) {
           <>
             <select aria-label="Concession" data-testid="concede-kind" value={concession} onChange={(e) => setConcession(e.target.value as ConcessionKind)}>{CONCESSION_KINDS.map((k) => <option key={k}>{k}</option>)}</select>
             <button disabled={busy} data-testid="concede" onClick={() => run(() => api.concede(card.id, concession))}>Concede</button>
+            <Term k="concede">What is conceding?</Term>
           </>
         )}
       </div>
@@ -326,7 +331,7 @@ function PastRoll({ card, env, canRetcon }: { card: LedgerCard; env: Env; canRet
   );
 }
 
-function NewRoll({ env, character, hasDraft }: { env: Env; character: Character; hasDraft: boolean }) {
+function NewRoll({ env, character, hasDraft, sessionZero }: { env: Env; character: Character; hasDraft: boolean; sessionZero: boolean }) {
   const { run, busy } = useAct(env.onNotice);
   const [skill, setSkill] = useState(character.skills[0]?.name ?? '__other');
   const [other, setOther] = useState('');
@@ -341,8 +346,9 @@ function NewRoll({ env, character, hasDraft }: { env: Env; character: Character;
         </select>
       </label>
       {skill === '__other' && <input aria-label="Skill name" placeholder="What are you attempting?" value={other} onChange={(e) => setOther(e.target.value)} />}
-      <button disabled={busy || !name || hasDraft} data-testid="new-roll-open" title="Opens a new card in the Ledger; it does not roll anything yet" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>Open a roll card</button>
-      {hasDraft && <span className="muted" data-testid="new-roll-hint">You already have an open card: finish it, or discard it, first.</span>}
+      <button disabled={busy || !name || hasDraft || sessionZero} data-testid="new-roll-open" title="Opens a new card in the Ledger; it does not roll anything yet" onClick={() => { setProblem(null); run(async () => { try { await env.api.createCard({ skillName: name, anchorParagraphId: currentParagraph(env.editor, env.me.id) }); } catch (e) { setProblem(e instanceof ApiFailure ? e.message : 'Could not open a roll.'); throw e; } }); }}>Open a roll card</button>
+      {sessionZero && <span className="muted" data-testid="new-roll-hint">Rolls open when the GM begins play. Finish your character in the Creation tab first.</span>}
+      {!sessionZero && hasDraft && <span className="muted" data-testid="new-roll-hint">You already have an open card: finish it, or discard it, first.</span>}
       {problem && <span role="alert" className="form-error" data-testid="new-roll-problem">{problem}</span>}
     </div>
   );
@@ -354,7 +360,7 @@ export function Ledger({ cards, character, env }: { cards: LedgerCard[]; charact
   const lastQuick = [...past].reverse().find((c) => c.speed === 'quick');
   return (
     <section aria-label="Ledger" data-testid="ledger">
-      {character && env.me.role !== 'gm' && <NewRoll env={env} character={character} hasDraft={active.some((c) => c.status === 'draft' && c.actorId === env.me.id)} />}
+      {character && env.me.role !== 'gm' && <NewRoll env={env} character={character} sessionZero={env.phase === 'sessionZero'} hasDraft={active.some((c) => c.status === 'draft' && c.actorId === env.me.id)} />}
       {active.length === 0 && <p className="muted">No roll in progress. Write up to the moment of action, then open a card.</p>}
       {active.map((c) => <ActiveCard key={c.id} card={c} env={env} />)}
       {past.length > 0 && <h3>Past rolls</h3>}

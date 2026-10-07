@@ -211,7 +211,7 @@ test('a GM and three players complete session zero, then play: grants, a swap, c
 });
 
 test('a player who joins after play has begun creates their character mid-campaign and cannot roll until it is ready', async ({ browser }) => {
-  const t = await createTable(['ilse']);
+  const t = await createTable(['ilse'], 'The Border War', false); // stays in session zero until the GM begins play
   const gm = await join(browser, t, 'gm1');
   await join(browser, t, 'ilse');
   await gm.getByTestId('tab-director').click();

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { majorityOf, type Character, type CreationState, type CrossingProposal, type ChapterState } from '@quillquest/rules';
 import { ApiFailure, type GameApi } from '../lib/game-api';
+import { Term } from './Term';
 import { StepForm, type FieldSpec } from './Forms';
 import { myParagraphs, useAct } from './Ledger';
 import type { Me } from './StoryEditor';
@@ -83,10 +84,11 @@ export function Creation(p: CreationProps) {
         </div>
       ) : <p>{mine.name} is ready to play.</p>}
 
+      <p className="muted">Unsure of a word? Tap any underlined word, or open <strong>Words</strong> at the top.</p>
       <p className="muted">Solo draft: <Link href={`/draft/${p.campaign}`} data-testid="draft-link">write your Origin and chapters in private</Link>, then bring them here.</p>
 
       {st.status === 'creating' && (<>
-        <h3>1 · Origin</h3>
+        <h3>1 · <Term k="origin">Origin</Term></h3>
         {st.origin.paragraphId ? <p>Origin posted.</p> : (
           <StepForm testId="origin-post" fields={[{ key: 'paragraphId', label: 'Your Origin paragraph', kind: 'select', options: paraOptions }]} label="Post Origin" run={run} busy={busy}
             submit={(v) => act('origin-post', { paragraphId: v.paragraphId })} />
@@ -96,7 +98,7 @@ export function Creation(p: CreationProps) {
             submit={(v) => act('origin-picks', { skill: v.skill, connection: v.connection })} />
         )}
 
-        <h3>2 · Life chapters ({st.chapters.length} of {maxChapters})</h3>
+        <h3>2 · <Term k="chapter">Life chapters</Term> ({st.chapters.length} of {maxChapters})</h3>
         {st.chapters.length === 0 && (
           <label className="check"><input type="checkbox" data-testid="veteran" checked={st.veteran} onChange={(e) => run(() => act('veteran', { veteran: e.target.checked }))} /> A veteran: four chapters instead of three</label>
         )}
@@ -112,10 +114,10 @@ export function Creation(p: CreationProps) {
             submit={(v) => act('chapter', { paragraphId: v.paragraphId, summary: v.summary, endsBadly: v.endsBadly, testedBelief: v.testedBelief })} />
         )}
 
-        <h3>3 · Crossing paths</h3>
+        <h3>3 · <Term k="crossing">Crossing paths</Term></h3>
         <Crossings st={st} mine={mine} others={others} creation={creation} crossings={crossings} characters={characters} paraOptions={paraOptions} run={run} busy={busy} act={act} />
 
-        <h3>4 · Capital</h3>
+        <h3>4 · <Term k="capital">Capital</Term></h3>
         <StepForm testId="capital" keep label="Save Capital" run={run} busy={busy}
           fields={[
             ...st.standingPrompts.map((c): FieldSpec => ({ key: `standing:${c}`, label: `How is ${c} seen? (you named it)`, kind: 'select', options: STANDING, initial: mine.standing[c] ?? 'Unknown' })),
@@ -127,7 +129,7 @@ export function Creation(p: CreationProps) {
           })} />
         {mine.possessions.length > 0 && <p>Possessions: {mine.possessions.map((x) => x.name).join(' · ')}</p>}
 
-        <h3>5 · Beliefs and Instincts</h3>
+        <h3>5 · <Term k="belief">Beliefs</Term> and <Term k="instinct">Instincts</Term></h3>
         <StepForm testId="beliefs" keep label="Save Beliefs" run={run} busy={busy}
           secondary={{ label: 'Check my Beliefs with Claude', testId: 'check', onClick: async (v) => {
             const out: string[] = [];
@@ -155,6 +157,7 @@ export function Creation(p: CreationProps) {
         )}
 
         <h3>6 · The hook</h3>
+        <p className="muted">Start play with a <Term k="thread">Thread</Term> from your past.</p>
         {mine.threads.length === 0 ? <p className="muted">You have no Threads yet; a chapter or a crossing gives you one.</p> : (
           <StepForm testId="hook" keep label="Start play with this Thread" run={run} busy={busy}
             fields={[{ key: 'threadId', label: 'The unfinished business your first scene follows', kind: 'select', options: mine.threads.map((t) => ({ value: t.id, label: t.text })), initial: st.hookThreadId ?? undefined }]}
@@ -174,8 +177,8 @@ function ChapterBlock({ ch, st, others, run, busy, act, game, characterId, still
   return (
     <div className="chapter" data-testid="chapter-block" data-index={ch.index}>
       <strong>Chapter {ch.index + 1}{ch.endsBadly ? ' · ended badly' : ''}</strong>: {ch.summary}
-      <div>Skill: <span data-testid="chapter-skill">{slotText(ch.skill)}</span>{ch.skill.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-skill" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'skill' }))}> swap</button>}</div>
-      <div>Trait: <span data-testid="chapter-trait">{slotText(ch.trait)}</span>{ch.trait.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-trait" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'trait' }))}> swap</button>}</div>
+      <div><Term k="skill">Skill</Term>: <span data-testid="chapter-skill">{slotText(ch.skill)}</span>{ch.skill.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-skill" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'skill' }))}> swap</button>}</div>
+      <div><Term k="trait">Trait</Term>: <span data-testid="chapter-trait">{slotText(ch.trait)}</span>{ch.trait.applied && !st.swapUsed && <button type="button" className="linklike" data-testid="swap-trait" onClick={() => run(() => act('swap', { chapter: ch.index, part: 'trait' }))}> swap</button>}</div>
       {(!ch.skill.applied || !ch.trait.applied) && <ChapterOffer ch={ch} st={st} run={run} busy={busy} act={act} game={game} characterId={characterId} />}
       {ch.output ? <div>Output: {ch.output.kind} — {ch.output.text}</div> : (
         <StepForm testId={`output-${ch.index}`} title="What does this chapter leave you?" hint={`Across your chapters you need one Connection, one Resource and one Thread, and the chapter that ended badly must leave a Thread. ${needed} A chosen output cannot be changed.`} label="Save output" run={run} busy={busy}
@@ -241,7 +244,7 @@ function ChapterOffer({ ch, st, run, busy, act, game, characterId }: { character
           if (!body.skill && !body.trait) return Promise.reject(new ApiFailure('Choose a Skill or a Trait first', 'BAD_INPUT', 400));
           return act('chapter-pick', body);
         }} />
-      <p className="muted">The others can object to a pick; then they propose instead. {st.selfRaiseUsed ? 'Your one raise to Capable is spent.' : ''}</p>
+      <p className="muted">The others can <Term k="object">object</Term> to a pick; then they propose instead. {st.selfRaiseUsed ? 'Your one raise to Capable is spent.' : ''}</p>
     </div>
   );
 }

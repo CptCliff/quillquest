@@ -42,7 +42,7 @@ export function Roster({ characters, creation, npcs, me, api, accounts, campaign
         const mine = c.ownerId === me.id;
         return (
           <article key={c.id} className={`sheet${focus === c.id ? ' focus' : ''}`} data-testid="sheet" data-character={c.id} ref={(el) => { if (el && focus === c.id) el.scrollIntoView({ block: 'nearest' }); }}>
-            <h3>{c.name}{c.left ? ' (left)' : ''} {creation[c.id]?.status === 'creating' && <span className="badge" data-testid="creating-badge">creating</span>} <Tokens n={c.conviction} /></h3>
+            <h3>{c.name}{c.left ? ' (left)' : ''} {creation[c.id]?.status === 'creating' && <span className="badge" data-testid="creating-badge" title="Still making their character">creating</span>} <Tokens n={c.conviction} /></h3>
             {me.role !== 'gm' && !me.left && !mine && !c.left && <Nominate character={c} api={api} onNotice={onNotice} />}
             <SheetBody c={c} onSkill={(s) => onSkill(c.id, s)}
               burdenExtra={mine || me.role === 'gm' ? (id) => <LayDown character={c} burdenId={id} api={api} onNotice={onNotice} /> : undefined} />

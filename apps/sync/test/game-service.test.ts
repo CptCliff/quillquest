@@ -44,7 +44,7 @@ function setup() {
   const docs = new FakeDocs();
   const dice = new QueuedDice();
   const now = () => new Date('2026-10-07T12:00:00Z');
-  const store = new MemoryGameStore();
+  const store = new MemoryGameStore({ phase: 'playing' });
   const svc = new GameService({ store, dice, docs, now });
   return { svc, docs, dice, store };
 }
@@ -264,7 +264,7 @@ describe('who may do what', () => {
     expect(me).toMatchObject({ id: 'uuid-1234-pc', name: 'Wren', ownerId: 'uuid-1234' });
     expect(me.skills).toEqual([]);
     expect(t.docs.published!.creation['uuid-1234-pc']).toMatchObject({ status: 'creating' });
-    expect(t.docs.published!.campaign.phase).toBe('sessionZero');
+    expect(t.docs.published!.campaign.phase).toBe('playing'); // this table was seeded already in play
   });
   it('a character still in creation cannot roll or push until the check passes or the GM overrides it', async () => {
     const t = setup();

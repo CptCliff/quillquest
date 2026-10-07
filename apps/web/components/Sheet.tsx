@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Character } from '@quillquest/rules';
 
 export function Tokens({ n }: { n: number }) {
-  return <span aria-label={`${n} Conviction`} data-testid="conviction">{'●'.repeat(n)}{'○'.repeat(Math.max(0, 3 - n))}</span>;
+  return <span aria-label={`${n} of 3 Conviction`} title={`Conviction: ${n} of 3 tokens`} data-testid="conviction">{'●'.repeat(n)}{'○'.repeat(Math.max(0, 3 - n))}</span>;
 }
 
 /** A character sheet, in words (design plan 5.4): everything the table is allowed to see, which is all of it. */

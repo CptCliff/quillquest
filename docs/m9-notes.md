@@ -26,3 +26,8 @@ Why: the first four-agent playtest never got a player through creation. Every Li
 - One open draft per player (`DRAFT_OPEN`); the GM can discard any draft (Ledger and Director); Director Set needs a Difficulty and a Danger.
 - Plain "Fill in a paragraph first" instead of "paragraphId is required"; theme button no longer squeezed out of the header.
 - Not done: glossary for jargon, a GM "Session zero" tab (it sits at the bottom of Director), matcher by role rather than keyword, duplicate pending crossings, whether rolls should be allowed before Begin play.
+
+## Glossary and the session-zero rule
+- Roll cards cannot be opened until the GM begins play (`SESSION_ZERO`, 409); the Ledger says why. Tests that need a table in play seed it (`MemoryGameStore({ phase: 'playing' })`, e2e `createTable` begins play for the preset users).
+- `apps/web/lib/glossary.ts` is the one list of words (wording follows Rules v4, no dice or numbers; `glossary.test.ts` checks). `Term` is a tappable word in headings and help text (never inside a form label); `Glossary` is the "Words" dialog in the table header, with a filter, Escape to close and focus returned.
+- Terms are used in the Creation headings, the draft card's help line, odds, Concede and the Spotlight bar; the Conviction pips now read "n of 3".

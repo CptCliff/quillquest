@@ -134,7 +134,7 @@ test('a big roll: a Belief on the line, the GM sets it, a failed goal is pushed,
   await ilse.getByLabel('Text').fill('Keeps the Oath She Chose');
   await ilse.getByTestId('lay-down').click();
   await expect(ilse.getByTestId('burden')).toHaveCount(0);
-  await expect(ilse.locator('[data-character="ilse-pc"] [data-testid="conviction"]')).toHaveAttribute('aria-label', '2 Conviction');
+  await expect(ilse.locator('[data-character="ilse-pc"] [data-testid="conviction"]')).toHaveAttribute('aria-label', '2 of 3 Conviction');
 });
 
 test('conceding ends the card, and the defeat is written and locked', async ({ browser }) => {
