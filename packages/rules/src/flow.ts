@@ -228,6 +228,11 @@ function backingFor(card: PromptCard, sheet: Character): Backing {
   return b.isCore && card.onTheLine === b.id ? 'core' : 'belief';
 }
 
+/** The engine's input for a card, or the reason it cannot be Set yet. Battles use it for the lead's card. */
+export function cardInput(card: PromptCard, sheet: Character): { input: CardInput; shifts: Shift[] } {
+  return toInput(card, sheet);
+}
+
 function toInput(card: PromptCard, sheet: Character): { input: CardInput; shifts: Shift[] } {
   if (!card.want.trim()) throw deny('MISSING_FIELD', 'Write the Want: what the character wants and how they go about it');
   if (!card.risk.trim()) throw deny('MISSING_FIELD', 'Write the Risk: what failure feels like');
