@@ -15,7 +15,7 @@ export interface Burden {
   status: 'active' | 'laidDown'; outcome?: 'trait' | 'beliefRewrite';
 }
 export interface Wound { id: string; level: WoundLevel; name: string; isExhaustion: boolean; needsRename?: boolean }
-export interface Chapter { summary: string; endsBadly: boolean; pick: GrantPick }
+export interface Chapter { summary: string; endsBadly: boolean; pick?: GrantPick }
 export interface Connection { id: string; text: string; withCharacterId?: string }
 export type ThreadSource = { type: 'chapter'; index: number } | { type: 'crossing' | 'origin' | 'play' };
 export interface Thread { id: string; text: string; source: ThreadSource }
