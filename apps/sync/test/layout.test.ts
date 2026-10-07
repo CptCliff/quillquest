@@ -55,7 +55,7 @@ describe('saved layouts', () => {
     expect((await t.call(ILSE, 'GET', 'tablet')).status).toBe(400);
     expect((await t.call(ILSE, 'PUT', 'wide', { layout: { ...defaultLayout('player'), junk: 'x'.repeat(70_000) } })).status).toBe(413);
   });
-  it('a GM's arrangement, Director included, comes back as saved', async () => {
+  it('a GM arrangement, Director included, comes back as saved', async () => {
     const t = await table();
     const gmLayout = movePanel(defaultLayout('gm'), 'director', findGroup(defaultLayout('gm'), 'story')!.id, 'center');
     await t.call(GM, 'PUT', 'wide', { layout: gmLayout });
