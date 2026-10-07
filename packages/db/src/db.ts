@@ -9,6 +9,10 @@ export interface CampaignSummary { id: string; title: string; role: 'gm' | 'play
 export type InviteStatus = 'open' | 'used' | 'revoked' | 'expired';
 export interface InviteInfo { id: string; createdAt: Date; expiresAt: Date; status: InviteStatus; acceptedBy: string | null }
 
+export type SuggestionStatus = 'shown' | 'used' | 'edited' | 'dismissed' | 'failed';
+export const SUGGESTION_STATUSES: SuggestionStatus[] = ['shown', 'used', 'edited', 'dismissed', 'failed'];
+export interface Suggestion { id: string; campaignId: string; userId: string; kind: string; input: unknown; output: unknown; status: SuggestionStatus; sessionNo: number; provider: string; createdAt: Date }
+
 export interface DbOptions { now?: () => Date }
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -177,6 +181,41 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
         await sql.query(`insert into documents (campaign_id, state) values ($1, $2) on conflict (campaign_id) do update set state = excluded.state, updated_at = now()`, [campaignId, state]);
       } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
     },
+    async loadGmDocument(campaignId: string): Promise<Uint8Array | null> {
+      const r = (await sql.query<{ state: Uint8Array }>('select state from gm_documents where campaign_id = $1', [campaignId])).rows[0];
+      return r ? new Uint8Array(r.state) : null;
+    },
+    async saveGmDocument(campaignId: string, state: Uint8Array): Promise<void> {
+      try {
+        await sql.query(`insert into gm_documents (campaign_id, state) values ($1, $2) on conflict (campaign_id) do update set state = excluded.state, updated_at = now()`, [campaignId, state]);
+      } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
+    },
+
+    // ---- the Claude suggestion log -------------------------------------------------------------------------------------
+    async addSuggestion(s: { campaignId: string; userId: string; kind: string; input: unknown; output: unknown; sessionNo: number; provider: string; status?: SuggestionStatus }): Promise<Suggestion> {
+      const id = randomBytes(8).toString('base64url');
+      const at = now();
+      await sql.query(
+        `insert into suggestions (id, campaign_id, user_id, kind, input, output, status, session_no, provider, created_at) values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10)`,
+        [id, s.campaignId, s.userId, s.kind, JSON.stringify(s.input), s.output == null ? null : JSON.stringify(s.output), s.status ?? 'shown', s.sessionNo, s.provider, at]);
+      return { id, campaignId: s.campaignId, userId: s.userId, kind: s.kind, input: s.input, output: s.output, status: s.status ?? 'shown', sessionNo: s.sessionNo, provider: s.provider, createdAt: at };
+    },
+    /** Newest first. Pass `userId` to list only one person's. */
+    async listSuggestions(campaignId: string, opts: { userId?: string; limit?: number } = {}): Promise<Suggestion[]> {
+      const rows = (await sql.query<Row>(
+        `select * from suggestions where campaign_id = $1 ${opts.userId ? 'and user_id = $3' : ''} order by created_at desc, id desc limit $2`,
+        opts.userId ? [campaignId, opts.limit ?? 100, opts.userId] : [campaignId, opts.limit ?? 100])).rows;
+      return rows.map((r) => ({ id: r.id as string, campaignId: r.campaign_id as string, userId: r.user_id as string, kind: r.kind as string, input: r.input, output: r.output, status: r.status as SuggestionStatus, sessionNo: Number(r.session_no), provider: r.provider as string, createdAt: new Date(r.created_at as string) }));
+    },
+    async countSuggestions(campaignId: string, sessionNo: number): Promise<number> {
+      return Number((await sql.query<{ n: string }>('select count(*) as n from suggestions where campaign_id = $1 and session_no = $2', [campaignId, sessionNo])).rows[0]!.n);
+    },
+    async setSuggestionStatus(campaignId: string, id: string, status: SuggestionStatus): Promise<void> {
+      if (!SUGGESTION_STATUSES.includes(status)) throw new DbError('BAD_INPUT', 'Unknown status');
+      const r = await sql.query('update suggestions set status = $3 where id = $1 and campaign_id = $2', [id, campaignId, status]);
+      if (r.rowCount === 0) throw new DbError('NOT_FOUND', 'No such suggestion');
+    },
+
     async loadDraft(campaignId: string, userId: string): Promise<Uint8Array | null> {
       const r = (await sql.query<{ state: Uint8Array }>('select state from draft_documents where campaign_id = $1 and user_id = $2', [campaignId, userId])).rows[0];
       return r ? new Uint8Array(r.state) : null;

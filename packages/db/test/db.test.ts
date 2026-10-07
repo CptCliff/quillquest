@@ -196,7 +196,7 @@ describe('row-level security: deny by default', () => {
     `);
     await h.pg.exec('set role authenticated');
     try {
-      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents']) {
+      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents', 'gm_documents', 'suggestions']) {
         const { rows } = await h.pg.query(`select * from ${t}`);
         expect(rows, t).toEqual([]);
       }
@@ -233,6 +233,36 @@ describe('solo drafts', () => {
     expect(await h.db.loadDraft(c.id, 'gm')).toBeNull(); // someone else's slot is a different row
     expect(await h.db.loadDocument(c.id)).toBeNull(); // and it is not the shared story
     await fails(h.db.saveDraft('nope-nope', 'wren', new Uint8Array([1])), 'NOT_FOUND');
+  });
+});
+
+describe('GM notes and the Claude suggestion log', () => {
+  it('keeps one private GM document per campaign, replacing on save', async () => {
+    const c = await h.db.createCampaign({ title: 'Notes', gmUserId: 'gm' });
+    expect(await h.db.loadGmDocument(c.id)).toBeNull();
+    await h.db.saveGmDocument(c.id, new Uint8Array([9, 8, 7]));
+    await h.db.saveGmDocument(c.id, new Uint8Array([1]));
+    expect(await h.db.loadGmDocument(c.id)).toEqual(new Uint8Array([1]));
+    expect(await h.db.loadDocument(c.id)).toBeNull(); // not the shared story
+    await fails(h.db.saveGmDocument('nope-nope', new Uint8Array([1])), 'NOT_FOUND');
+  });
+  it('logs every Claude answer, lists them by campaign (and by person), updates their status, and counts a session\'s calls', async () => {
+    const c = await h.db.createCampaign({ title: 'Log', gmUserId: 'gm' });
+    await h.db.ensureProfile('wren', 'Wren');
+    const a = await h.db.addSuggestion({ campaignId: c.id, userId: 'gm', kind: 'beliefChallenge', input: { scene: 'x' }, output: { prompts: ['a'] }, sessionNo: 1, provider: 'fake' });
+    h.clock.now = new Date(h.clock.now.getTime() + 1000);
+    const b = await h.db.addSuggestion({ campaignId: c.id, userId: 'wren', kind: 'skillMatch', input: { sentence: 's' }, output: { skill: 'Sneak' }, sessionNo: 1, provider: 'fake' });
+    h.clock.now = new Date(h.clock.now.getTime() + 1000);
+    await h.db.addSuggestion({ campaignId: c.id, userId: 'wren', kind: 'skillMatch', input: {}, output: null, sessionNo: 2, provider: 'fake', status: 'failed' });
+    expect((await h.db.listSuggestions(c.id)).map((s) => [s.kind, s.status, s.userId])).toEqual([['skillMatch', 'failed', 'wren'], ['skillMatch', 'shown', 'wren'], ['beliefChallenge', 'shown', 'gm']]);
+    expect((await h.db.listSuggestions(c.id, { userId: 'wren' })).length).toBe(2);
+    expect(await h.db.countSuggestions(c.id, 1)).toBe(2);
+    expect(await h.db.countSuggestions(c.id, 2)).toBe(1); // a failed call still cost something
+    await h.db.setSuggestionStatus(c.id, a.id, 'used');
+    expect((await h.db.listSuggestions(c.id)).find((s) => s.id === a.id)?.status).toBe('used');
+    await fails(h.db.setSuggestionStatus(c.id, b.id, 'bogus' as never), 'BAD_INPUT');
+    await fails(h.db.setSuggestionStatus(c.id, 'nope', 'used'), 'NOT_FOUND');
+    await fails(h.db.setSuggestionStatus('other-campaign', a.id, 'used'), 'NOT_FOUND'); // a suggestion belongs to its campaign
   });
 });
 

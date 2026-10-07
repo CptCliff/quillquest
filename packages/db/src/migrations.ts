@@ -82,4 +82,30 @@ export const MIGRATIONS: Migration[] = [
       alter table draft_documents enable row level security;
     `,
   },
+  {
+    // The GM's private notes document, and the log of every Claude answer (design plan 3.1, 8.3).
+    name: '0003_director',
+    sql: `
+      create table gm_documents (
+        campaign_id text primary key references campaigns (id) on delete cascade,
+        state bytea not null,
+        updated_at timestamptz not null default now()
+      );
+      create table suggestions (
+        id text primary key,
+        campaign_id text not null references campaigns (id) on delete cascade,
+        user_id text not null references profiles (user_id),
+        kind text not null check (kind in ('beliefChallenge', 'danger', 'npcLine', 'oracle', 'skillMatch', 'grant', 'beliefCheck')),
+        input jsonb not null,
+        output jsonb,
+        status text not null default 'shown' check (status in ('shown', 'used', 'edited', 'dismissed', 'failed')),
+        session_no integer not null,
+        provider text not null,
+        created_at timestamptz not null default now()
+      );
+      create index suggestions_campaign on suggestions (campaign_id, session_no, created_at);
+      alter table gm_documents enable row level security;
+      alter table suggestions enable row level security;
+    `,
+  },
 ];
