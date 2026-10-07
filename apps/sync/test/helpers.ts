@@ -9,10 +9,26 @@ export const ILSE: Identity = { id: 'ilse', name: 'Ilse', role: 'player', color:
 export const SELLA: Identity = { id: 'sella', name: 'Sella', role: 'player', color: '#1d4ed8' };
 export const GM: Identity = { id: 'gm1', name: 'GM', role: 'gm', color: '#15803d' };
 
-export async function startServer(store = new MemoryStore()) {
-  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20 });
+export async function startServer(store = new MemoryStore(), game: { devDice?: boolean } = { devDice: true }) {
+  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20, game });
   await server.listen();
-  return { server, store, url: server.webSocketURL };
+  return { server, store, url: server.webSocketURL, http: `http://127.0.0.1:${server.address.port}` };
+}
+
+/** Calls the game API as a signed-in user. Returns the status and parsed body. */
+export async function api(base: string, who: Identity | null, method: string, path: string, body?: unknown, token?: string) {
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(who || token ? { Authorization: `Bearer ${token ?? signDevToken(who!, SECRET)}` } : {}),
+    },
+    body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let json: any = null;
+  try { json = JSON.parse(text); } catch { /* not JSON */ }
+  return { status: res.status, json, text };
 }
 
 export interface Client {

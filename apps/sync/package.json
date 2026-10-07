@@ -14,7 +14,8 @@
     "@quillquest/story": "workspace:*",
     "yjs": "13.6.33",
     "y-protocols": "^1.0.6",
-    "lib0": "^0.2.100"
+    "lib0": "^0.2.100",
+    "@quillquest/rules": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

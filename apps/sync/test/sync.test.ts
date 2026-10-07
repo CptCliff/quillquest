@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { MemoryStore } from '../src/store';
+import { HocuspocusDocPort } from '../src/game/docport';
 import { REJECTED_PREFIX } from '../src/server';
 import { ILSE, SELLA, GM, addParagraph, attrs, connect, para, plain, startServer, textOf, waitFor, type Client } from './helpers';
 
@@ -69,46 +70,45 @@ describe('server enforcement (a hostile client that skips every UI check)', () =
     expect(t.ilse.fragment.length).toBe(0);
   });
 
-  it('rejects a player locking or unlocking prose; the GM may, and it is logged', async () => {
+  it('rejects every client lock change, the GM\'s included: only the game locks prose', async () => {
     const t = await table();
     const p = addParagraph(t.ilse.fragment, attrs('p1', 'ilse'), 'The outcome.');
     await waitFor(() => t.gm.fragment.length === 1 && t.sella.fragment.length === 1);
-
     para(t.sella.fragment, 0).setAttribute('locked', true as never);
     await rejected(t.sella);
     expect(p.getAttribute('locked') as unknown).toBe(false);
-
     para(t.gm.fragment, 0).setAttribute('locked', true as never);
-    await waitFor(() => (p.getAttribute('locked') as unknown) === true);
-    expect(t.store.overrides).toMatchObject([{ gmId: 'gm1', action: 'lock', paragraphId: 'p1' }]);
+    await rejected(t.gm);
+    expect(p.getAttribute('locked') as unknown).toBe(false);
   });
 
-  it('a locked paragraph refuses its own author, and the GM, but the GM can unlock first (a retcon)', async () => {
+  it('a paragraph the server locked refuses its author and the GM; the server can unlock it for a retcon', async () => {
     const t = await table();
-    const p = addParagraph(t.ilse.fragment, attrs('p1', 'ilse', { locked: true }), 'Settled.');
-    // The paragraph was created locked by a player: that itself is rejected.
+    const p = addParagraph(t.ilse.fragment, attrs('p1', 'ilse'), 'Settled.');
+    await waitFor(() => t.gm.fragment.length === 1);
+    const docs = new HocuspocusDocPort(t.server.hocuspocus);
+    await docs.setLocked('campaign-1', ['p1'], true);
+    await waitFor(() => (p.getAttribute('locked') as unknown) === true && (para(t.gm.fragment, 0).getAttribute('locked') as unknown) === true);
+
+    (p.get(0) as Y.XmlText).insert(0, 'Edited. ');
     await rejected(t.ilse);
+    expect(textOf(para(t.gm.fragment, 0))).toBe('Settled.');
 
-    // Lock it properly through the GM instead.
-    const t2 = await table();
-    const q = addParagraph(t2.ilse.fragment, attrs('p1', 'ilse'), 'Settled.');
-    await waitFor(() => t2.gm.fragment.length === 1);
-    para(t2.gm.fragment, 0).setAttribute('locked', true as never);
-    await waitFor(() => (q.getAttribute('locked') as unknown) === true);
-
-    (q.get(0) as Y.XmlText).insert(0, 'Edited. ');
-    await rejected(t2.ilse);
-    expect(textOf(para(t2.gm.fragment, 0))).toBe('Settled.');
-
-    // The GM, in a fresh connection, retcons: unlock, then the author edits.
-    const gm2 = track(await connect(t2.url, GM));
-    const author2 = track(await connect(t2.url, ILSE));
-    para(gm2.fragment, 0).setAttribute('locked', false as never);
+    await docs.setLocked('campaign-1', ['p1'], false);
+    const author2 = track(await connect(t.url, ILSE));
     await waitFor(() => (para(author2.fragment, 0).getAttribute('locked') as unknown) === false);
     (para(author2.fragment, 0).get(0) as Y.XmlText).insert(0, 'Retconned. ');
-    await waitFor(() => textOf(para(gm2.fragment, 0)) === 'Retconned. Settled.');
-    expect(t2.store.overrides.map((o) => o.action)).toEqual(['lock', 'unlock']);
-    void p;
+    await waitFor(() => textOf(para(t.gm.fragment, 0)) === 'Retconned. Settled.');
+  });
+
+  it('rejects a client that writes the ledger or characters', async () => {
+    const t = await table();
+    t.sella.doc.getMap('ledger').set('c99', { status: 'written', outcome: 'cleanSuccess' });
+    await rejected(t.sella);
+    expect(t.sella.closes.at(-1)?.reason).toContain('SERVER_OWNED');
+    const u = await table();
+    u.ilse.doc.getMap('characters').set('ilse-pc', { conviction: 3 });
+    await rejected(u.ilse);
   });
 
   it('rejects an unsigned or tampered token', async () => {

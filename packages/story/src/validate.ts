@@ -1,4 +1,4 @@
-import type { Actor, Cell, GmAction, Paragraph, StoryDoc, Violation, ViolationCode } from './types';
+import type { Actor, Cell, Paragraph, StoryDoc, Violation, ViolationCode } from './types';
 
 const sameBase = (a: Cell[], b: Cell[]): boolean => {
   const x = a.filter((c) => !c.ins);
@@ -40,15 +40,14 @@ function sameSuggestionMaps(a: ReturnType<typeof othersSuggestions>, b: ReturnTy
 
 export interface ValidationResult {
   violations: Violation[];
-  gmActions: GmAction[];
 }
 
 /**
  * The edit policy (design plan 3.3, 5.1, 9.2). Compares a document before and after one update by one actor.
  *
  * - Own text is edited freely; another writer's text only through their own suggestion marks.
- * - A locked paragraph refuses every content change, from everyone including the GM. A retcon is two steps: the GM
- *   unlocks (reported in gmActions for the override log), then edits in a later update.
+ * - A locked paragraph refuses every content change, from everyone including the GM. Locks are never changed by a client
+ *   update: the server locks prose when a roll's outcome is written, and unlocks it for a GM retcon (M3).
  * - Locked paragraphs always form a prefix of the story, so nothing can be inserted above a locked paragraph.
  * - Authorship, ids and order never change. A new paragraph must be created by its author and start unlocked.
  *
@@ -56,7 +55,6 @@ export interface ValidationResult {
  */
 export function validateChange(before: StoryDoc, after: StoryDoc, actor: Actor): ValidationResult {
   const violations: Violation[] = [];
-  const gmActions: GmAction[] = [];
   const bad = (code: ViolationCode, message: string, paragraphId?: string) => violations.push({ code, message, paragraphId });
 
   const beforeById = new Map(before.map((p) => [p.paragraphId, p]));
@@ -84,7 +82,7 @@ export function validateChange(before: StoryDoc, after: StoryDoc, actor: Actor):
       if (a.locked) bad('LOCK_NEW', 'A new paragraph starts unlocked', a.paragraphId);
       continue;
     }
-    checkParagraph(b, a, actor, bad, gmActions);
+    checkParagraph(b, a, actor, bad);
   }
 
   let sawUnlocked = false;
@@ -95,7 +93,7 @@ export function validateChange(before: StoryDoc, after: StoryDoc, actor: Actor):
       break;
     }
   }
-  return { violations, gmActions };
+  return { violations };
 }
 
 function checkParagraph(
@@ -103,14 +101,10 @@ function checkParagraph(
   a: Paragraph,
   actor: Actor,
   bad: (code: ViolationCode, message: string, paragraphId?: string) => void,
-  gmActions: GmAction[],
 ) {
   const id = a.paragraphId;
   if (a.authorId !== b.authorId) bad('AUTHOR_CHANGED', 'Authorship never changes', id);
-  if (a.locked !== b.locked) {
-    if (actor.role === 'gm') gmActions.push({ type: a.locked ? 'lock' : 'unlock', paragraphId: id });
-    else bad('LOCK_CHANGE', 'Only the GM can lock or unlock prose', id);
-  }
+  if (a.locked !== b.locked) bad('LOCK_CHANGE', 'Prose is locked and unlocked by the game, not by editing', id);
   if (a.pov !== b.pov && actor.id !== b.authorId) bad('POV_CHANGED', "Only the author sets a paragraph's point of view", id);
 
   if (sameCells(b.cells, a.cells)) return;

@@ -61,15 +61,12 @@ describe('locks', () => {
     const after = para('p1', 'ilse', 'The roll is written.', { locked: true, ins: [[' x', ref('s1', 'sella')]] });
     expect(codes([locked()], [after], sella)).toContain('LOCKED');
   });
-  it('a player cannot unlock or lock', () => {
-    expect(codes([locked()], [{ ...locked(), locked: false }])).toContain('LOCK_CHANGE');
+  it('nobody changes a lock by editing, not even the GM: the game does that', () => {
     const open = para('p1', 'ilse', 'Open.');
-    expect(codes([open], [{ ...open, locked: true }], sella)).toContain('LOCK_CHANGE');
-  });
-  it('the GM may unlock (a retcon) and it is reported for the log', () => {
-    const r = validateChange([locked()], [{ ...locked(), locked: false }], gm);
-    expect(r.violations).toEqual([]);
-    expect(r.gmActions).toEqual([{ type: 'unlock', paragraphId: 'p1' }]);
+    for (const who of [ilse, sella, gm]) {
+      expect(codes([locked()], [{ ...locked(), locked: false }], who)).toContain('LOCK_CHANGE');
+      expect(codes([open], [{ ...open, locked: true }], who)).toContain('LOCK_CHANGE');
+    }
   });
   it('unlocking and editing in one update is still an edit to a locked paragraph', () => {
     expect(codes([locked()], [para('p1', 'ilse', 'Rewritten.')], gm)).toContain('LOCKED');
@@ -81,7 +78,6 @@ describe('locks', () => {
     const doc = [para('p1', 'ilse', 'a', { locked: true }), para('p2', 'ilse', 'b', { locked: true })];
     expect(codes(doc, [para('n', 'sella', 'x'), ...doc], sella)).toContain('LOCK_PREFIX');
     expect(codes(doc, [{ ...doc[0]!, locked: false }, doc[1]!], gm)).toContain('LOCK_PREFIX');
-    expect(codes(doc, [doc[0]!, { ...doc[1]!, locked: false }], gm)).toEqual([]);
   });
   it('new paragraphs after the locked prefix are fine', () => {
     const doc = [para('p1', 'ilse', 'a', { locked: true })];

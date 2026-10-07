@@ -34,18 +34,12 @@ export interface Actor {
 export type ViolationCode =
   | 'LOCKED' | 'LOCK_CHANGE' | 'LOCK_NEW' | 'LOCK_PREFIX'
   | 'NOT_OWNER_EDIT' | 'SUGGESTION_TAMPER' | 'FORGED_AUTHOR' | 'AUTHOR_CHANGED' | 'POV_CHANGED'
-  | 'REORDER' | 'DUPLICATE_ID' | 'MISSING_ID' | 'SCHEMA';
+  | 'REORDER' | 'DUPLICATE_ID' | 'MISSING_ID' | 'SCHEMA' | 'SERVER_OWNED';
 
 export interface Violation {
   code: ViolationCode;
   paragraphId?: string;
   message: string;
-}
-
-/** A GM lock change, reported so the server can write it to the override log. */
-export interface GmAction {
-  type: 'lock' | 'unlock';
-  paragraphId: string;
 }
 
 /** Mark names used by @handlewithcare/prosemirror-suggest-changes. */
