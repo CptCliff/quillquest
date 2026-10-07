@@ -14,3 +14,4 @@ export * from './creation';
 export * from './flow';
 export * from './chips';
 export * from './creation-flow';
+export * from './director';
