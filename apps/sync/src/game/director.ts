@@ -9,6 +9,7 @@ import type { LlmProvider } from '../llm';
 import { GameError } from './errors';
 import type { DocPort, GameService } from './service';
 import type { GameState } from './store';
+import { link } from '../notify/links';
 import type { Suggestion, SuggestionLog, SuggestionStatus } from './suggestions';
 
 const SCENE_WORDS = 3000;
@@ -43,11 +44,11 @@ export class DirectorService {
     gmOnly(actor);
     return this.game.read(campaign, actor, async (s) => ({
       nominations: s.nominations, npcs: Object.values(s.npcs),
-      settings: { themes: s.themes, faces: s.faces, cap: s.llmCap, sessionNo: s.sessionNo, used: await this.d.log.count(campaign, s.sessionNo), configured: this.d.llm !== null },
+      settings: { themes: s.themes, faces: s.faces, cap: s.llmCap, stallHours: s.stallHours, pushWindowMinutes: s.pushWindowMinutes, sessionNo: s.sessionNo, used: await this.d.log.count(campaign, s.sessionNo), configured: this.d.llm !== null },
     }));
   }
 
-  setSettings(campaign: string, actor: Identity, patch: { themes?: string; faces?: string[]; cap?: number }) {
+  setSettings(campaign: string, actor: Identity, patch: { themes?: string; faces?: string[]; cap?: number; stallHours?: number; pushWindowMinutes?: number }) {
     gmOnly(actor);
     return this.game.mutate(campaign, actor, (s) => {
       if (patch.themes !== undefined) { if (patch.themes.length > 500) throw new GameError(400, 'BAD_INPUT', 'Keep the themes under 500 characters'); s.themes = patch.themes.trim(); }
@@ -56,7 +57,9 @@ export class DirectorService {
         s.faces = patch.faces.map((f) => f.trim());
       }
       if (patch.cap !== undefined) { if (!Number.isInteger(patch.cap) || patch.cap < 0 || patch.cap > 500) throw new GameError(400, 'BAD_INPUT', 'The cap is a whole number from 0 to 500'); s.llmCap = patch.cap; }
-      return { themes: s.themes, faces: s.faces, cap: s.llmCap };
+      if (patch.stallHours !== undefined) { if (!Number.isInteger(patch.stallHours) || patch.stallHours < 0 || patch.stallHours > 720) throw new GameError(400, 'BAD_INPUT', 'Stall reminders are 0 to 720 hours (0 is off)'); s.stallHours = patch.stallHours; }
+      if (patch.pushWindowMinutes !== undefined) { if (!Number.isInteger(patch.pushWindowMinutes) || patch.pushWindowMinutes < 0 || patch.pushWindowMinutes > 10_080) throw new GameError(400, 'BAD_INPUT', 'The push window is 0 to 10080 minutes'); s.pushWindowMinutes = patch.pushWindowMinutes; }
+      return { themes: s.themes, faces: s.faces, cap: s.llmCap, stallHours: s.stallHours, pushWindowMinutes: s.pushWindowMinutes };
     });
   }
 
@@ -69,11 +72,20 @@ export class DirectorService {
 
   nominate(campaign: string, actor: Identity, b: { characterId: string; kind: NominationKind; beliefId?: string; note: string }) {
     if (actor.role === 'gm') throw new GameError(403, 'NOT_ALLOWED', 'Players nominate; the GM awards');
-    return this.game.mutate(campaign, actor, (s) => { adopt(s, nominate(dworld(s), actor.id, b)); return { nominations: s.nominations.filter((n) => n.nominatedBy === actor.id) }; });
+    return this.game.mutate(campaign, actor, async (s) => {
+      adopt(s, nominate(dworld(s), actor.id, b));
+      const n = s.nominations.at(-1)!;
+      await this.game.tellGm(campaign, s, { kind: 'conviction', text: `${actor.name} nominated ${s.characters[b.characterId]?.name} for Conviction: ${b.note.slice(0, 80)}`, link: link.tab(campaign, 'director'), dedupeKey: `nom:${n.id}` });
+      return { nominations: s.nominations.filter((x) => x.nominatedBy === actor.id) };
+    });
   }
   awardNomination(campaign: string, actor: Identity, nominationId: string) {
     gmOnly(actor);
-    return this.game.mutate(campaign, actor, (s) => { adopt(s, awardNomination(dworld(s), actor.id, nominationId, this.at())); return { conviction: s.convictionLog.length }; });
+    return this.game.mutate(campaign, actor, (s) => {
+      adopt(s, awardNomination(dworld(s), actor.id, nominationId, this.at()));
+      this.awarded(campaign, s);
+      return { conviction: s.convictionLog.length };
+    });
   }
   declineNomination(campaign: string, actor: Identity, nominationId: string) {
     gmOnly(actor);
@@ -81,7 +93,17 @@ export class DirectorService {
   }
   awardDirect(campaign: string, actor: Identity, a: { characterId: string; reason: ConvictionReason }) {
     gmOnly(actor);
-    return this.game.mutate(campaign, actor, (s) => { adopt(s, awardDirect(dworld(s), actor.id, a, this.at())); return { conviction: s.characters[a.characterId]!.conviction }; });
+    return this.game.mutate(campaign, actor, (s) => {
+      adopt(s, awardDirect(dworld(s), actor.id, a, this.at()));
+      this.awarded(campaign, s);
+      return { conviction: s.characters[a.characterId]!.conviction };
+    });
+  }
+
+  /** The newest log entry: its character's player is told. */
+  private awarded(campaign: string, s: GameState) {
+    const e = s.convictionLog.at(-1)!;
+    this.game.tell(campaign, s.characters[e.characterId]?.ownerId, { kind: 'conviction', text: `You earned Conviction: ${e.note.slice(0, 80)}`, link: link.tab(campaign, 'codex'), dedupeKey: `award:${e.id}` });
   }
 
   // ---- NPCs ------------------------------------------------------------------------------------------------------------

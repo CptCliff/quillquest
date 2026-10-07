@@ -8,7 +8,7 @@ export class DevProvider implements AuthProvider {
   async verify(token: string): Promise<Claims> {
     try {
       const id = authenticate(token, this.secret);
-      return { userId: id.id, name: id.name, color: id.color, role: id.role };
+      return { userId: id.id, name: id.name, color: id.color, role: id.role, email: `${id.id}@dev.test` };
     } catch (e) {
       throw new AuthError(e instanceof Error ? e.message : 'invalid dev token');
     }

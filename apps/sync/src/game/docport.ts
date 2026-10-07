@@ -12,6 +12,7 @@ export const CANON = 'canon';
 export const CAMPAIGN = 'campaign';
 export const NPCS = 'npcs';
 export const CONVICTION_LOG = 'convictionLog';
+export const BATTLES = 'battles';
 
 /** Reads and writes the live campaign document from the server. These writes bypass the client edit policy on purpose. */
 export class HocuspocusDocPort implements DocPort {
@@ -37,6 +38,24 @@ export class HocuspocusDocPort implements DocPort {
       for (const node of doc.getXmlFragment(FRAGMENT).toArray()) {
         if (node instanceof Y.XmlElement && paragraphIds.includes(String(node.getAttribute('paragraphId')))) node.setAttribute('locked', locked as never);
       }
+    });
+  }
+
+  appendParagraphs(campaign: string, items: { authorId: string; text: string }[]): Promise<string[]> {
+    return this.withDoc(campaign, (doc) => {
+      const ids: string[] = [];
+      const els = items.map((it) => {
+        const id = `p${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+        ids.push(id);
+        const el = new Y.XmlElement('paragraph');
+        el.setAttribute('paragraphId', id); el.setAttribute('authorId', it.authorId); el.setAttribute('pov', 'own');
+        const text = new Y.XmlText();
+        text.insert(0, it.text);
+        el.insert(0, [text]);
+        return el;
+      });
+      doc.getXmlFragment(FRAGMENT).push(els);
+      return ids;
     });
   }
 
@@ -75,6 +94,7 @@ export class HocuspocusDocPort implements DocPort {
       put(CAMPAIGN, projection.campaign);
       put(NPCS, projection.npcs);
       put(CONVICTION_LOG, projection.convictionLog);
+      put(BATTLES, projection.battles);
     });
   }
 }

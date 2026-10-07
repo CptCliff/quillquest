@@ -13,6 +13,7 @@ export class PgGameStore implements GameStore {
   async save(campaign: string, state: GameState): Promise<void> {
     await this.db.saveGameState(campaign, state);
   }
+  campaigns() { return this.db.listGameStateCampaigns(); }
 }
 
 /** The shared story document in Postgres, as one Yjs snapshot per campaign; a player's solo draft goes in its own private table. */

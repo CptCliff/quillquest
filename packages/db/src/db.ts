@@ -206,6 +206,9 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
         await sql.query(`insert into game_state (campaign_id, state) values ($1, $2::jsonb) on conflict (campaign_id) do update set state = excluded.state, updated_at = now()`, [campaignId, JSON.stringify(state)]);
       } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
     },
+    async listGameStateCampaigns(): Promise<string[]> {
+      return (await sql.query<{ campaign_id: string }>('select campaign_id from game_state')).rows.map((r) => r.campaign_id);
+    },
     async loadDocument(campaignId: string): Promise<Uint8Array | null> {
       const r = (await sql.query<{ state: Uint8Array }>('select state from documents where campaign_id = $1', [campaignId])).rows[0];
       return r ? new Uint8Array(r.state) : null;

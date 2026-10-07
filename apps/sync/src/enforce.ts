@@ -16,7 +16,7 @@ export function extractSyncUpdate(raw: Uint8Array): Uint8Array | null {
 export const FRAGMENT = 'default';
 
 /** Root types the server writes. Clients may read them but never change them. */
-const SERVER_OWNED_MAPS = ['ledger', 'characters', 'creation', 'canon', 'campaign', 'npcs', 'convictionLog'];
+const SERVER_OWNED_MAPS = ['ledger', 'characters', 'creation', 'canon', 'campaign', 'npcs', 'convictionLog', 'battles'];
 
 /**
  * A fingerprint of everything in the document except the story. Root types that arrive in an update are generic until

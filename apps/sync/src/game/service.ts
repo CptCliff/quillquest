@@ -1,13 +1,15 @@
 import {
-  RuleViolation, publicNpc, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
+  RuleViolation, forcedNext, joinSpotlight, leaveSpotlight, passSpotlight, takeSpotlight, toPublicBattle, publicNpc, addCreatingCharacter, addReadyCharacter, applyCosts, canRoll, draftProblems, endCheck, importDraft, classifyCard, closeSet as flowCloseSet, concede, diceView, editCard, expandShifts, layDownBurden,
   markWritten, outcomePrompt, previewCard, pushCard, pushOptions, reopenForRetcon, resolveSkill, revertCosts, rollCard, suggestShifts, toPublicCard,
   newCard, type BurdenOutcome, type CardPatch, type Character, type ConcessionKind, type CostInput, type DiceView, type FlowActor,
-  type CanonEntry, type ConvictionLogEntry, type CreationState, type PublicNpc, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
+  type CanonEntry, type PublicBattle, type ConvictionLogEntry, type CreationState, type PublicNpc, type CreationWorld, type Draft, type OutcomePrompt, type PromptCard, type PublicCard, type ShiftCandidate,
 } from '@quillquest/rules';
 import { lockThrough, type StoryDoc } from '@quillquest/story';
 import type { Identity } from '../auth';
 import type { DiceProvider } from './dice';
 import { GameError } from './errors';
+import { link } from '../notify/links';
+import type { Notice } from '../notify/notifier';
 import { ACTIONS, PARAGRAPH_ACTIONS } from './creation';
 import { draftName } from './docnames';
 import { seedDevCharacter } from './dev-characters';
@@ -17,6 +19,8 @@ import type { GameState, GameStore } from './store';
 export interface DocPort {
   story(campaign: string): Promise<StoryDoc>;
   setLocked(campaign: string, paragraphIds: string[], locked: boolean): Promise<void>;
+  /** Adds paragraphs to the end of the shared story, each authored by the person given, and returns their new ids. */
+  appendParagraphs(campaign: string, items: { authorId: string; text: string }[]): Promise<string[]>;
   /** Writes the public projection: ledger entries (no dice), the open-table character sheets, and session-zero progress. */
   publish(campaign: string, projection: Projection): Promise<void>;
   /** A player's private solo draft, read for import. */
@@ -33,12 +37,20 @@ export interface Projection {
   /** Only what the GM has revealed of each NPC. */
   npcs: Record<string, PublicNpc>;
   convictionLog: Record<string, ConvictionLogEntry>;
-  campaign: { phase: GameState['phase']; crossings: GameState['proposals']; overrides: GameState['checkOverrides']; themes: string };
+  battles: Record<string, PublicBattle>;
+  campaign: { phase: GameState['phase']; crossings: GameState['proposals']; overrides: GameState['checkOverrides']; themes: string; spotlight: { holder: string | null; players: string[]; due: string | null } };
 }
 
 export type LedgerEntry = PublicCard & { seq: number };
 
-export interface GameDeps { store: GameStore; dice: DiceProvider; docs: DocPort; now?: () => Date }
+/** Tells someone the story is waiting on them (queued; the notifier decides whether and when to email). Never throws into a game action. */
+export type NotifyFn = (campaign: string, userId: string, n: Notice) => void;
+export interface GameDeps {
+  store: GameStore; dice: DiceProvider; docs: DocPort; now?: () => Date;
+  notify?: NotifyFn;
+  /** The campaign's GM, when the game state has not yet seen them act. */
+  gmOf?: (campaign: string) => Promise<string | null>;
+}
 
 export interface CreateCardInput {
   anchorParagraphId?: string | null;
@@ -68,7 +80,7 @@ export class GameService {
     const prev = this.chains.get(campaign) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(async () => {
       const state = await this.d.store.load(campaign);
-      this.ensureCharacter(state, actor);
+      this.prepare(state, actor);
       const out = await fn(state);
       await this.d.store.save(campaign, state);
       await this.publish(campaign, state);
@@ -82,12 +94,43 @@ export class GameService {
     const prev = this.chains.get(campaign) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(async () => {
       const state = await this.d.store.load(campaign);
-      this.ensureCharacter(state, actor);
+      this.prepare(state, actor);
       return fn(state);
     });
     this.chains.set(campaign, next);
     return next;
   }
+
+  /** Before any action: the actor has a character, the GM is known, and the spotlight lists exactly the players at the table. */
+  private prepare(s: GameState, actor: Identity) {
+    this.ensureCharacter(s, actor);
+    if (actor.role === 'gm' && actor.id !== 'system') s.gmId = actor.id;
+    let sp = s.spotlight;
+    for (const c of Object.values(s.characters)) {
+      if (!c.ownerId) continue;
+      sp = c.left ? leaveSpotlight(sp, c.ownerId) : joinSpotlight(sp, c.ownerId);
+    }
+    s.spotlight = sp;
+  }
+
+  /** The campaign's GM: the one the game has seen act, or whoever the directory says. */
+  async gmId(campaign: string, s?: GameState): Promise<string | null> {
+    return s?.gmId ?? (await this.d.gmOf?.(campaign)) ?? null;
+  }
+
+  /** Every campaign with saved game state (for periodic jobs). */
+  campaigns(): Promise<string[]> { return this.d.store.campaigns(); }
+  /** A short signature of a battle's declarations, so a re-declaration after a change can notify the GM again. */
+  sig(b: { contributions: { characterId: string; status: string; line: string }[] }): string {
+    return b.contributions.map((c) => `${c.characterId}:${c.status}:${c.line.length}`).join('|');
+  }
+
+  /** Queue a message for someone. Fire and forget: a mail problem must never break a game action. */
+  tell(campaign: string, userId: string | null | undefined, n: Notice) {
+    if (!userId || !this.d.notify) return;
+    try { this.d.notify(campaign, userId, n); } catch { /* notifications are best effort */ }
+  }
+  async tellGm(campaign: string, s: GameState, n: Notice) { this.tell(campaign, await this.gmId(campaign, s), n); }
 
   /** Every player has a character from their first visit: a blank one in creation, or (preset dev users only) a ready-made sheet. */
   private ensureCharacter(s: GameState, actor: Identity) {
@@ -121,7 +164,8 @@ export class GameService {
       canon: Object.fromEntries(s.canon.map((e) => [e.id, e])),
       npcs: Object.fromEntries(Object.values(s.npcs).flatMap((n) => { const p = publicNpc(n); return p ? [[n.id, p]] : []; })),
       convictionLog: Object.fromEntries(s.convictionLog.map((e) => [e.id, e])),
-      campaign: { phase: s.phase, crossings: s.proposals, overrides: s.checkOverrides, themes: s.themes },
+      battles: Object.fromEntries(Object.values(s.battles).map((b) => [b.id, toPublicBattle(b)])),
+      campaign: { phase: s.phase, crossings: s.proposals, overrides: s.checkOverrides, themes: s.themes, spotlight: { holder: s.spotlight.holder, players: s.spotlight.players, due: forcedNext(s.spotlight) } },
     });
   }
 
@@ -142,8 +186,24 @@ export class GameService {
       }, sheet);
       s.cards[id] = card;
       s.order.push(id);
+      await this.watchBig(campaign, s, card);
       return toPublicCard(card);
     });
+  }
+
+  /** A big card whose Want and Risk are filled is ready for the GM to Set: tell them once, and remember since when it has waited. */
+  private async watchBig(campaign: string, s: GameState, card: PromptCard) {
+    const key = `card:${card.id}`;
+    if (card.speed !== 'big' || card.status !== 'draft' || !card.want.trim() || !card.risk.trim() || s.waits[key]) return;
+    s.waits[key] = (this.d.now?.() ?? new Date()).getTime();
+    await this.tellGm(campaign, s, { kind: 'set', text: `${s.characters[card.characterId]?.name ?? 'A player'}'s ${card.skillName} roll is ready for you to Set.`, link: link.card(campaign, card.id), dedupeKey: `set:${card.id}` });
+  }
+
+  /** A Danger that landed on someone else's character is theirs to write. */
+  private costNotice(campaign: string, s: GameState, card: PromptCard) {
+    if (!card.roll?.dangerHit || !card.dangerTargetId || card.dangerTargetId === card.characterId) return;
+    const target = s.characters[card.dangerTargetId];
+    this.tell(campaign, target?.ownerId, { kind: 'cost', text: `A Danger from ${s.characters[card.characterId]?.name ?? 'someone'}'s roll landed on ${target?.name}: write your cost.`, link: link.card(campaign, card.id), dedupeKey: `cost:${card.id}:${card.roll.push}` });
   }
 
   private target(s: GameState, id: string | null | undefined): string | null {
@@ -162,7 +222,7 @@ export class GameService {
       if (flowPatch.dangerTargetId !== undefined) flowPatch.dangerTargetId = this.target(s, flowPatch.dangerTargetId);
       const next = editCard(card, asFlow(actor), flowPatch, sheet);
       s.cards[cardId] = next;
-      return toPublicCard(next);
+      return this.watchBig(campaign, s, next).then(() => toPublicCard(next));
     });
   }
 
@@ -185,6 +245,7 @@ export class GameService {
       const card = this.card(s, cardId);
       const next = flowCloseSet(card, asFlow(actor), this.sheet(s, card.characterId));
       s.cards[cardId] = next;
+      delete s.waits[`card:${cardId}`];
       return toPublicCard(next);
     });
   }
@@ -204,6 +265,8 @@ export class GameService {
       }
       const next = rollCard(card, asFlow(actor), this.d.dice.forCampaign(campaign));
       s.cards[cardId] = next;
+      delete s.waits[`card:${cardId}`];
+      this.costNotice(campaign, s, next);
       return toPublicCard(next);
     });
   }
@@ -217,6 +280,7 @@ export class GameService {
       const r = pushCard(card, asFlow(actor), kind, this.d.dice.forCampaign(campaign), sheet);
       s.cards[cardId] = r.card;
       s.characters[card.characterId] = r.character;
+      this.costNotice(campaign, s, r.card);
       return toPublicCard(r.card);
     });
   }
@@ -306,6 +370,51 @@ export class GameService {
     });
   }
 
+  // ---- stalls --------------------------------------------------------------------------------------------------------------
+
+  /** Run on a timer: when something has waited longer than the GM's limit, remind the GM once (they may Set it, skip someone, or pass the spotlight). */
+  async checkStalls(): Promise<number> {
+    let reminded = 0;
+    for (const campaign of await this.d.store.campaigns()) {
+      const state = await this.d.store.load(campaign);
+      if (!state.stallHours || !Object.keys(state.waits).length) continue;
+      const nowMs = (this.d.now?.() ?? new Date()).getTime();
+      const gm = await this.gmId(campaign, state);
+      for (const [key, since] of Object.entries(state.waits)) {
+        const [kind, id] = key.split(':') as ['card' | 'battle', string];
+        const live = kind === 'card' ? state.cards[id]?.status === 'draft' : state.battles[id]?.status === 'declaring';
+        if (!live || nowMs - since < state.stallHours * 3_600_000) continue;
+        const hours = Math.floor((nowMs - since) / 3_600_000);
+        this.tell(campaign, gm, { kind: 'stall', text: `A ${kind === 'card' ? 'card' : 'battle'} has been waiting ${hours} hours. You may Set it, skip the person you are waiting on, or pass the spotlight.`, link: kind === 'card' ? link.card(campaign, id) : link.battle(campaign, id), dedupeKey: `stall:${key}` });
+        reminded++;
+      }
+    }
+    return reminded;
+  }
+
+  // ---- the spotlight ------------------------------------------------------------------------------------------------------
+
+  /** The holder passes the spotlight to another player (the GM may pass from anyone); the new holder is told, and so is anyone now due. */
+  passSpotlight(campaign: string, actor: Identity, to: string): Promise<{ holder: string | null }> {
+    return this.mutate(campaign, actor, async (s) => {
+      s.spotlight = passSpotlight(s.spotlight, asFlow(actor), to);
+      await this.spotlightNotices(campaign, s);
+      return { holder: s.spotlight.holder };
+    });
+  }
+  takeSpotlight(campaign: string, actor: Identity): Promise<{ holder: string | null }> {
+    return this.mutate(campaign, actor, (s) => { s.spotlight = takeSpotlight(s.spotlight, asFlow(actor)); return { holder: s.spotlight.holder }; });
+  }
+  private async spotlightNotices(campaign: string, s: GameState) {
+    const holder = s.spotlight.holder;
+    const story = await this.d.docs.story(campaign);
+    const last = story.at(-1)?.paragraphId ?? null;
+    const n = s.spotlight.players.length;
+    if (holder && holder !== s.gmId) this.tell(campaign, holder, { kind: 'spotlight', text: 'The spotlight has passed to you: it is your turn to write.', link: link.story(campaign, last), dedupeKey: `spot:${s.spotlight.leftOut[holder] ?? 0}:${holder}:${n}:${story.length}` });
+    const due = forcedNext(s.spotlight);
+    if (due && due !== holder) this.tell(campaign, due, { kind: 'spotlight', text: 'You have been left out for two rounds: you get the next post.', link: link.story(campaign, last), dedupeKey: `due:${due}:${s.spotlight.leftOut[due]}` });
+  }
+
   // ---- membership --------------------------------------------------------------------------------------------------
 
   /** A player joined (or came back): they get a character, and it is no longer marked as left. */
@@ -350,6 +459,12 @@ export class GameService {
       const story = PARAGRAPH_ACTIONS.has(action) ? await this.d.docs.story(campaign) : [];
       const next = handler(world(s), asFlow(actor), body, { story, now: (this.d.now?.() ?? new Date()).toISOString() }, actor);
       adopt(s, next);
+      if (action === 'chapter') {
+        const mine = s.characterOf[actor.id];
+        const n = s.creation[mine ?? '']?.chapters.length ?? 0;
+        for (const c of Object.values(s.characters)) if (c.ownerId && !c.left && c.ownerId !== actor.id)
+          this.tell(campaign, c.ownerId, { kind: 'grant', text: `${s.characters[mine!]?.name ?? 'A player'} posted a chapter: propose a Skill and a Trait.`, link: link.tab(campaign, 'create'), dedupeKey: `grant:${mine}:${n}:${c.ownerId}` });
+      }
       return { done: true as const };
     });
   }

@@ -18,6 +18,10 @@ import { DirectorService } from './game/director';
 import { GameService } from './game/service';
 import { MemorySuggestionLog, PgSuggestionLog, type SuggestionLog } from './game/suggestions';
 import { providerFromEnv, type LlmProvider } from './llm';
+import { FakeMailer, mailerFromEnv, type Mailer } from './mail';
+import { BattleService } from './game/battles';
+import { Notifier } from './notify/notifier';
+import { MemoryNotifyStore, PgNotifyStore, type NotifyStore } from './notify/store';
 import { FileGameStore, MemoryGameStore, type GameStore } from './game/store';
 
 export interface SyncServerOptions {
@@ -36,6 +40,12 @@ export interface SyncServerOptions {
   /** The game (cards, rolls, characters). Defaults to an in-memory store and random dice. */
   /** The language model behind the Claude assistant. Omitted means "not configured": its routes answer 501. */
   llm?: LlmProvider | null;
+  /**
+   * Async play (design plan 10). Without a mailer nothing is emailed and the rest of the game is unchanged. `devRoutes` mounts the routes that
+   * read the fake outbox and move the notifier's clock (tests and browser runs only). Periodic jobs (mail batches, push windows, stalled-card
+   * reminders) run every `intervalMs`; null turns the timer off (tests call the jobs themselves).
+   */
+  mail?: { mailer?: Mailer | null; publicUrl?: string; store?: NotifyStore; batchMs?: number; devRoutes?: boolean; intervalMs?: number | null };
   game?: { store?: GameStore; dice?: DiceProvider; /** Dev only: mounts the route that queues the next dice. */ devDice?: boolean; suggestions?: SuggestionLog };
 }
 
@@ -67,7 +77,7 @@ export function createSyncServer(opts: SyncServerOptions) {
       // Who they are comes from a verified token; what they may do comes from their membership. Nothing the client says
       // about itself is trusted, and a stranger to the campaign never gets the document.
       const claims = await verifyToken(providers, token);
-      if (db) await db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color);
+      if (db) await db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color, claims.email);
       const identity = await directory.resolve(claims, campaignOf(documentName));
       if (!identity) throw new Error('not a member of this campaign');
       // A solo draft is private: only its author may open it. The GM and the other players are strangers to it.
@@ -114,21 +124,44 @@ export function createSyncServer(opts: SyncServerOptions) {
       for (const state of states.values()) state.user = { id: identity.id, name: identity.name, color: identity.color };
     },
   });
+  // Async play: who is waiting on whom, and the mail that tells them when they are away.
+  const mailer = opts.mail?.mailer ?? null;
+  const notifyStore = opts.mail?.store ?? (db ? new PgNotifyStore(db) : new MemoryNotifyStore());
+  let clockOffset = 0;
+  const presence = (campaign: string): ReadonlySet<string> => {
+    const ids = new Set<string>();
+    server.hocuspocus.documents.get(campaign)?.connections.forEach((_entry, conn) => {
+      const id = (conn.context as { identity?: Identity } | undefined)?.identity?.id;
+      if (id) ids.add(id);
+    });
+    return ids;
+  };
+  const notifier = mailer ? new Notifier({ store: notifyStore, mailer, presence, publicUrl: opts.mail?.publicUrl ?? 'http://localhost:3000', batchMs: opts.mail?.batchMs, now: () => new Date(Date.now() + clockOffset) }) : null;
   const service = new GameService({
     store: opts.game?.store ?? (db ? new PgGameStore(db) : new MemoryGameStore()),
     dice,
     docs: new HocuspocusDocPort(server.hocuspocus),
+    now: () => new Date(Date.now() + clockOffset),
+    notify: notifier ? (campaign, userId, n) => { void notifier.notify(campaign, userId, n).catch(() => undefined); } : undefined,
+    gmOf: db ? async (campaign) => (await db.listMembers(campaign)).find((m) => m.role === 'gm')?.userId ?? null : undefined,
   });
   const docs = new HocuspocusDocPort(server.hocuspocus);
   const director = new DirectorService(service, { llm: opts.llm ?? null, log: (opts.game?.suggestions ?? (db ? new PgSuggestionLog(db) : new MemorySuggestionLog())), docs });
+  const battles = new BattleService(service, { dice, docs, now: () => Date.now() + clockOffset });
+  /** The periodic jobs. Each is safe to run at any time. */
+  const jobs = async () => ({ mail: notifier ? await notifier.tick() : null, pushes: await battles.tick(), stalls: await service.checkStalls() });
+  const timer = opts.mail?.intervalMs === null ? null : setInterval(() => { void jobs().catch((e) => console.error('background job failed', e)); }, opts.mail?.intervalMs ?? 30_000);
+  timer?.unref();
+  const stop = server.destroy.bind(server);
+  server.destroy = async () => { if (timer) clearInterval(timer); return stop(); };
   /** Closes a person's live connections to one campaign; they reconnect and are authenticated afresh (as read-only if they left). */
   const dropConnections = (campaign: string, userId: string) => {
     server.hocuspocus.documents.get(campaign)?.connections.forEach((_entry, conn) => {
       if ((conn.context as { identity?: Identity } | undefined)?.identity?.id === userId) conn.close({ code: 1000, reason: MEMBERSHIP_CHANGED });
     });
   };
-  game = (req, res) => handleGameRequest(req, res, { service, director, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
-  return Object.assign(server, { game: service, director });
+  game = (req, res) => handleGameRequest(req, res, { service, director, battles, notifyStore: notifier ? notifyStore : undefined, dev: opts.mail?.devRoutes && mailer instanceof FakeMailer ? { mail: { sent: () => mailer.sent, advance: (ms) => { clockOffset += ms; }, tick: jobs } } : undefined, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
+  return Object.assign(server, { game: service, director, battles, notifier, jobs, mailer });
 }
 
 // Run directly: `pnpm --filter @quillquest/sync dev`
@@ -161,6 +194,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     store: db ? new PgDocumentStore(db) : new FileStore(dir), port, quiet: false,
     auth: { providers, db },
     llm: providerFromEnv(env, production),
+    mail: { mailer: mailerFromEnv(env, production), publicUrl: env.QUILLQUEST_PUBLIC_URL, devRoutes: devAuth && env.QUILLQUEST_DEV_MAIL === '1' },
     game: { store: db ? undefined : new FileGameStore(dir), devDice: devAuth && env.QUILLQUEST_DEV_DICE === '1' },
   });
   await server.listen();

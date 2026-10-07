@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, Draft, Nomination, Npc, PromptCard } from '@quillquest/rules';
+import type { BattleCard, CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, Draft, Nomination, Npc, PromptCard, Spotlight } from '@quillquest/rules';
 
 export interface OverrideEntry { at: string; gmId: string; action: 'retcon'; cardId: string }
 
@@ -38,12 +38,25 @@ export interface GameState {
   faces: string[];
   /** Claude calls allowed per session; 0 turns the assistant off. */
   llmCap: number;
+  /** Battle cards (M7). Each keeps its roll, so this is server-only; the public map carries words. */
+  battles: Record<string, BattleCard>;
+  /** The spotlight: whose post is next. */
+  spotlight: Spotlight;
+  /** Minutes contributors have to withdraw when the lead pushes a battle. */
+  pushWindowMinutes: number;
+  /** Hours a card or battle may wait before the GM is reminded; 0 turns reminders off. */
+  stallHours: number;
+  /** When the table started waiting on something: key `card:<id>` or `battle:<id>` -> epoch ms. */
+  waits: Record<string, number>;
+  /** The campaign's GM, learned from the first GM request. */
+  gmId: string | null;
 }
 
 export const emptyState = (): GameState => ({
   seq: 0, cards: {}, order: [], characters: {}, characterOf: {}, overrides: [],
   phase: 'sessionZero', creation: {}, canon: [], proposals: [], checkOverrides: [], wseq: 0, drafts: {},
   npcs: {}, nominations: [], convictionLog: [], dseq: 0, sessionNo: 1, themes: '', faces: [], llmCap: 30,
+  battles: {}, spotlight: { players: [], holder: null, leftOut: {} }, pushWindowMinutes: 10, stallHours: 0, waits: {}, gmId: null,
 });
 
 /**
@@ -64,6 +77,8 @@ export function normalizeState(raw: Partial<GameState>): GameState {
 export interface GameStore {
   load(campaign: string): Promise<GameState>;
   save(campaign: string, state: GameState): Promise<void>;
+  /** Every campaign with saved game state, for the periodic jobs (push windows, stalled-card reminders). */
+  campaigns(): Promise<string[]>;
 }
 
 const safe = (c: string) => {
@@ -75,6 +90,7 @@ export class MemoryGameStore implements GameStore {
   private states = new Map<string, GameState>();
   async load(campaign: string) { return structuredClone(this.states.get(campaign) ?? emptyState()); }
   async save(campaign: string, state: GameState) { this.states.set(campaign, structuredClone(state)); }
+  async campaigns() { return [...this.states.keys()]; }
 }
 
 export class FileGameStore implements GameStore {
@@ -92,5 +108,8 @@ export class FileGameStore implements GameStore {
     const file = join(this.dir, `${safe(campaign)}.game.json`);
     await writeFile(`${file}.tmp`, JSON.stringify(state));
     await rename(`${file}.tmp`, file);
+  }
+  async campaigns() {
+    try { return (await readdir(this.dir)).filter((f) => f.endsWith('.game.json')).map((f) => f.slice(0, -'.game.json'.length)); } catch { return []; }
   }
 }

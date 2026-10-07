@@ -10,10 +10,18 @@ import { GameError } from './errors';
 import type { ClientPatch, CreateCardInput, GameService, WrittenInput } from './service';
 import type { DirectorService } from './director';
 import { handleDirector } from './director-routes';
+import type { BattleService } from './battles';
+import { handleBattles } from './battle-routes';
+import type { Notifier } from '../notify/notifier';
+import type { NotifyStore } from '../notify/store';
 
 export interface RouteOptions {
   service: GameService;
   director: DirectorService;
+  battles: BattleService;
+  /** Notification preferences and the dev mail routes need these; absent without a mail setup. */
+  notifyStore?: NotifyStore;
+  dev?: { mail?: { sent: () => unknown[]; advance: (ms: number) => void; tick: () => Promise<unknown> } };
   dice: DiceProvider;
   providers: AuthProvider[];
   directory: Directory;
@@ -100,6 +108,15 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
       return ok({ queued: values.length });
     }
 
+    // Dev only: read the fake mailer's outbox, move the notifier's clock, and run a tick. Never mounted unless asked for.
+    if (parts[1] === 'dev' && parts[2] === 'mail') {
+      if (!o.dev?.mail) throw new GameError(404, 'NOT_FOUND', 'No such route');
+      if (method === 'GET' && !parts[3]) return ok({ sent: o.dev.mail.sent() });
+      if (method === 'POST' && parts[3] === 'advance') { o.dev.mail.advance(Number((await readJson(req)).ms) || 0); return ok({ advanced: true }); }
+      if (method === 'POST' && parts[3] === 'tick') return ok({ result: await o.dev.mail.tick() });
+      throw new GameError(404, 'NOT_FOUND', 'No such route');
+    }
+
     const claims = await identify(req, o);
     if (o.db) await o.db.ensureProfile(claims.userId, claims.name ?? claims.email, claims.color);
 
@@ -159,6 +176,24 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
     }
 
     if (rest[0] === 'me' && method === 'GET') return ok(await svc.me(campaign, actor));
+
+    const battled = await handleBattles(o.battles, campaign, actor, rest, method, () => readJson(req));
+    if (battled !== undefined) return ok(battled);
+
+    if (rest[0] === 'spotlight' && method === 'POST') {
+      if (rest[1] === 'pass') return ok(await svc.passSpotlight(campaign, actor, str((await readJson(req)).to, 'to')));
+      if (rest[1] === 'take') return ok(await svc.takeSpotlight(campaign, actor));
+    }
+    if (rest[0] === 'prefs') {
+      if (!o.notifyStore) throw new GameError(501, 'NOT_CONFIGURED', 'Notifications are not set up on this server');
+      if (method === 'GET') return ok({ mode: await o.notifyStore.mode(campaign, actor.id), hasEmail: !!(await o.notifyStore.email(actor.id)) });
+      if (method === 'PUT') {
+        const mode = (await readJson(req)).mode;
+        if (mode !== 'immediate' && mode !== 'digest' && mode !== 'off') throw new GameError(400, 'BAD_INPUT', 'mode is immediate, digest or off');
+        await o.notifyStore.setMode(campaign, actor.id, mode);
+        return ok({ mode });
+      }
+    }
 
     const handled = await handleDirector(o.director, campaign, actor, rest, method, () => readJson(req));
     if (handled !== undefined) return ok(handled);

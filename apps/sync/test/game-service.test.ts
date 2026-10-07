@@ -27,6 +27,11 @@ class FakeDocs implements DocPort {
     this.doc = this.doc.map((p) => (ids.includes(p.paragraphId) ? { ...p, locked } : p));
   }
   async publish(_c: string, projection: Projection) { this.published = structuredClone(projection); }
+  async appendParagraphs(_c: string, items: { authorId: string; text: string }[]) {
+    const ids = items.map((_, i) => `n${this.doc.length + i + 1}`);
+    this.doc = [...this.doc, ...items.map((it, i) => para(ids[i]!, it.authorId, it.text))];
+    return ids;
+  }
   async draft(_c: string, userId: string) { return structuredClone(this.drafts[userId] ?? []); }
   async copyDraft(_c: string, userId: string, map: Record<string, string>) {
     this.copied.push({ userId, map });

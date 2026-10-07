@@ -24,6 +24,8 @@ export async function handleDirector(svc: DirectorService, campaign: string, act
       themes: typeof j.themes === 'string' ? j.themes : undefined,
       faces: Array.isArray(j.faces) ? j.faces.map(String) : undefined,
       cap: typeof j.cap === 'number' ? j.cap : undefined,
+      stallHours: typeof j.stallHours === 'number' ? j.stallHours : undefined,
+      pushWindowMinutes: typeof j.pushWindowMinutes === 'number' ? j.pushWindowMinutes : undefined,
     });
   }
   if (a === 'session' && b === 'start' && method === 'POST') return svc.startSession(campaign, actor);

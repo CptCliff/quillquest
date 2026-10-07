@@ -1,7 +1,7 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { signDevToken, type Identity } from '../src/auth';
-import { createSyncServer } from '../src/server';
+import { createSyncServer, type SyncServerOptions } from '../src/server';
 import { MemoryStore } from '../src/store';
 import type { LlmProvider } from '../src/llm';
 
@@ -10,8 +10,8 @@ export const ILSE: Identity = { id: 'ilse', name: 'Ilse', role: 'player', color:
 export const SELLA: Identity = { id: 'sella', name: 'Sella', role: 'player', color: '#1d4ed8' };
 export const GM: Identity = { id: 'gm1', name: 'GM', role: 'gm', color: '#15803d' };
 
-export async function startServer(store = new MemoryStore(), game: { devDice?: boolean } = { devDice: true }, llm: LlmProvider | null = null) {
-  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20, game, llm });
+export async function startServer(store = new MemoryStore(), game: { devDice?: boolean } = { devDice: true }, llm: LlmProvider | null = null, mail?: SyncServerOptions['mail']) {
+  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20, game, llm, mail });
   await server.listen();
   return { server, store, url: server.webSocketURL, http: `http://127.0.0.1:${server.address.port}` };
 }
