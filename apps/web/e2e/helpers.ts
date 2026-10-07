@@ -3,7 +3,7 @@ import { expect, type Browser, type Page } from '@playwright/test';
 const WEB = 'http://localhost:3100';
 const SYNC = 'http://localhost:1234';
 
-async function token(user: string): Promise<string> {
+export async function token(user: string): Promise<string> {
   const res = await fetch(`${WEB}/api/dev-token?user=${user}`);
   if (!res.ok) throw new Error(`no dev token for ${user}`);
   return (await res.json()).token;

@@ -18,11 +18,13 @@ import { explain } from '../lib/violations';
 
 export interface Me { id: string; name: string; color: string; role: 'player' | 'gm'; left?: boolean }
 
-export function StoryEditor({ doc, provider, me, onEditor, onNotice, mySkills, onOpenAuthor, onChipInfo, onChipRoll, lookupInk, inkVersion }: {
+export function StoryEditor({ doc, provider, me, onEditor, onNotice, mySkills, onOpenAuthor, onChipInfo, onChipRoll, onSuggest, lookupInk, inkVersion }: {
   doc: Y.Doc; provider: HocuspocusProvider; me: Me; onEditor: (e: Editor) => void; onNotice: (msg: string) => void;
   /** The writer's Skills, from their sheet. Read through a ref so chips always show the current rank. */
   /** Name and ink for any member, connected or not; `inkVersion` changes when that list does. */
   lookupInk: (userId: string) => { name: string; color: string } | undefined; inkVersion: number;
+  /** Claude's guess at a Skill for a sentence the code matcher missed; null when none or unavailable. Read through a ref by the caller. */
+  onSuggest?: (sentence: string) => Promise<string | null>;
   mySkills: () => Skill[]; onOpenAuthor: (userId: string) => void; onChipInfo: (skill: string) => void; onChipRoll: (skill: string, paragraphId: string | null) => void;
 }) {
   // Ink for anyone who has written, connected or not: live awareness first, preset colors as the fallback.
@@ -36,7 +38,7 @@ export function StoryEditor({ doc, provider, me, onEditor, onNotice, mySkills, o
       Collaboration.configure({ document: doc, field: 'default' }),
       CollaborationCaret.configure({ provider, user: { name: me.name, color: me.color } }),
       StoryGuard.configure({ userId: me.id, role: me.role, ink, onReject: (v) => onNotice(explain(v)), onOpenAuthor }),
-      SkillChips.configure({ userId: me.id, getSkills: mySkills, onInfo: onChipInfo, onRoll: onChipRoll }),
+      SkillChips.configure({ userId: me.id, getSkills: mySkills, onInfo: onChipInfo, onRoll: onChipRoll, suggest: onSuggest }),
     ],
     editable: !me.left,
     editorProps: { attributes: { class: 'story', 'data-testid': 'story', 'aria-label': 'Story' } },

@@ -45,6 +45,7 @@ export function Creation(p: CreationProps) {
   const st = mine ? creation[mine.id] : undefined;
   const { busy, run } = useAct(onNotice);
   const [check, setCheck] = useState<{ passed: boolean; problems: { code: string; message: string }[] } | null>(null);
+  const [beliefNotes, setBeliefNotes] = useState<string[]>([]);
   const key = JSON.stringify([st, mine?.beliefs, mine?.threads, mine?.connections, mine?.crossings]);
   useEffect(() => { if (mine && st?.status === 'creating') game.check(mine.id).then(setCheck, () => undefined); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -119,12 +120,22 @@ export function Creation(p: CreationProps) {
 
         <h3>5 · Beliefs and Instincts</h3>
         <StepForm testId="beliefs" label="Save Beliefs" run={run} busy={busy}
+          secondary={{ label: 'Check my Beliefs with Claude', testId: 'check', onClick: async (v) => {
+            const out: string[] = [];
+            for (const kind of ['objective', 'relationship', 'worldview']) {
+              if (!String(v[kind]).trim()) continue;
+              const r = (await game.ask('beliefCheck', { kind, text: v[kind] })).suggestion.draft as { conviction: boolean; action: boolean; fix: string | null };
+              out.push(r.conviction && r.action ? `${kind}: holds a conviction and an action.` : `${kind}: ${r.fix}`);
+            }
+            setBeliefNotes(out);
+          } }}
           fields={[
             { key: 'objective', label: 'An objective: what you are trying to do', initial: mine.beliefs.find((b) => b.kind === 'objective')?.text },
             { key: 'relationship', label: 'A relationship: who you stand by', initial: mine.beliefs.find((b) => b.kind === 'relationship')?.text },
             { key: 'worldview', label: 'A worldview (your Core Belief)', initial: mine.beliefs.find((b) => b.kind === 'worldview')?.text },
           ]}
           submit={(v) => act('beliefs', { beliefs: ['objective', 'relationship', 'worldview'].map((kind) => ({ kind, text: v[kind] })) })} />
+        {beliefNotes.length > 0 && <ul data-testid="belief-check-result">{beliefNotes.map((n) => <li key={n}>{n}</li>)}</ul>}
         <StepForm testId="instincts" label="Save Instincts" run={run} busy={busy}
           fields={[0, 1, 2].map((i): FieldSpec => ({ key: `i${i}`, label: `Instinct ${i + 1}`, initial: mine.instincts[i]?.text }))}
           submit={(v) => act('instincts', { instincts: [v.i0, v.i1, v.i2] })} />
@@ -142,7 +153,7 @@ export function Creation(p: CreationProps) {
         )}
       </>)}
 
-      <GrantCards me={me} others={others} characters={characters} creation={creation} run={run} busy={busy} act={act} />
+      <GrantCards me={me} others={others} characters={characters} creation={creation} run={run} busy={busy} act={act} game={game} />
     </section>
   );
 }
@@ -221,8 +232,8 @@ function Crossings({ st, mine, others, creation, crossings, characters, paraOpti
 }
 
 /** Grant cards waiting on you: the other players' chapters, where you propose a Skill and a Trait or agree with a proposal. */
-function GrantCards({ me, others, characters, creation, run, busy, act }: {
-  me: Me; others: Character[]; characters: Record<string, Character>; creation: Record<string, CreationState>; run: Run; busy: boolean; act: (n: string, b?: Record<string, unknown>) => Promise<unknown>;
+function GrantCards({ me, others, characters, creation, run, busy, act, game }: {
+  game: GameApi; me: Me; others: Character[]; characters: Record<string, Character>; creation: Record<string, CreationState>; run: Run; busy: boolean; act: (n: string, b?: Record<string, unknown>) => Promise<unknown>;
 }) {
   const open = others.flatMap((c) => (creation[c.id]?.chapters ?? []).map((ch) => ({ c, ch }))).filter(({ ch }) => !ch.skill.applied || !ch.trait.applied);
   if (!others.length) return null;
@@ -235,6 +246,7 @@ function GrantCards({ me, others, characters, creation, run, busy, act }: {
       {open.map(({ c, ch }) => (
         <div key={`${c.id}-${ch.index}`} className="card" data-testid="grant-card" data-character={c.id} data-chapter={ch.index}>
           <strong>{c.name}, chapter {ch.index + 1}{ch.endsBadly ? ' (ended badly: the Trait is harmful)' : ''}</strong>: {ch.summary}
+          <GrantIdeas game={game} characterId={c.id} chapter={ch.index} run={run} busy={busy} act={act} />
           {(['skill', 'trait'] as const).map((part) => {
             const slot = ch[part] as ChapterState['skill'] & ChapterState['trait'];
             if (slot.applied) return <div key={part} data-testid={`grant-${part}-done`}>{part === 'skill' ? 'Skill' : 'Trait'}: {slotText(slot)}</div>;
@@ -261,5 +273,21 @@ function GrantCards({ me, others, characters, creation, run, busy, act }: {
         </div>
       ))}
     </>
+  );
+}
+
+/** Ideas from Claude for one chapter: chips you can send straight to the grant card as your proposal. Drafts only. */
+function GrantIdeas({ game, characterId, chapter, run, busy, act }: { game: GameApi; characterId: string; chapter: number; run: Run; busy: boolean; act: (n: string, b?: Record<string, unknown>) => Promise<unknown> }) {
+  const [ideas, setIdeas] = useState<{ skills: string[]; traits: string[] } | null>(null);
+  return (
+    <div data-testid="grant-ideas">
+      <button type="button" className="linklike" data-testid="grant-suggest" disabled={busy} onClick={() => run(async () => { setIdeas((await game.ask('grant', { characterId, chapter })).suggestion.draft as { skills: string[]; traits: string[] }); })}>Ideas from Claude</button>
+      {ideas && (
+        <div className="row">
+          {ideas.skills.map((s) => <button key={`s-${s}`} type="button" data-testid="idea-skill" disabled={busy} title="Propose this Skill (new, at Trained)" onClick={() => run(() => act('propose-skill', { characterId, chapter, skill: s, mode: 'new' }))}>Skill: {s}</button>)}
+          {ideas.traits.map((s) => <button key={`t-${s}`} type="button" data-testid="idea-trait" disabled={busy} title="Propose this Trait" onClick={() => run(() => act('propose-trait', { characterId, chapter, trait: s }))}>Trait: {s}</button>)}
+        </div>
+      )}
+    </div>
   );
 }

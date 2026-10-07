@@ -35,14 +35,20 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   (`apps/sync/src/game/creation.ts`, `GameService.creationAct`) and publishes public `creation`, `canon` and `campaign` Yjs maps. Characters
   are `creating` or `ready`; a character still creating cannot roll (409 NOT_READY) until its check passes or the GM overrides (logged).
   Solo drafts are private documents `<campaign>~draft~<user>` (own table `draft_documents`). `docs/m5-notes.md`.
-- Test counts: 25 story, 240 rules, 25 db, 91 sync, 3 web, 18 Playwright.
-- Next: M6 (Claude suggestions, Belief check, Codex, Director tools). Interface wish for the design pass: players can resize AND rearrange panes.
+- M6 Director and Claude: done. `packages/rules/src/director.ts` (NPC reveal, Conviction nominations and log), `packages/prompts` (seven request kinds, role gate, strict parsers),
+  `apps/sync/src/game/director.ts` + `director-routes.ts`, swappable model providers in `apps/sync/src/llm` (`QUILLQUEST_LLM=anthropic|openai-compat|fake|none`, see `docs/llm-providers.md`),
+  GM notes document `<campaign>~gm`, suggestion log and per-session cap. `docs/m6-notes.md`.
+- Test counts: 25 story, 251 rules, 15 prompts, 27 db, 112 sync, 3 web, 21 Playwright.
+- Next: M7 (battle roll, async email, phone). Interface wish for the design pass: players can resize AND rearrange panes.
 
 ## Gotchas
 - Dev sign-in is a signed token from `/api/dev-token`, only with `QUILLQUEST_DEV_AUTH=1` (and `NEXT_PUBLIC_DEV_AUTH=1` for the web list). It must never be set in production; the server refuses to start if it is. Real sign-in is Supabase.
 - Preset dev users (ilse, sella, rook) have ready-made sheets (`apps/sync/src/game/dev-characters.ts`); every other new player starts blank and in creation. Mira, Tobin and Wren are dev users for creation tests.
 - A campaign saved before M5 is read as already `playing` with ready characters (`normalizeState`).
 - A paragraph is "posted" by naming it; creation steps never lock prose. Cloned Yjs elements cannot be read until integrated: read the original's attributes first.
+- Hidden NPC fields live only in server game state; the `npcs` map carries revealed fields. Never add GM data to a published map or a player prompt; tests scan for sentinel strings.
+- Playwright runs the sync server with `QUILLQUEST_LLM=fake`. `FakeProvider` is refused in production.
+- The Director tab holds a second editor (GM notes); scope story selectors to `.story-pane .story`.
 - Row-level security is on with no policies: all data access goes through the sync server. Never expose a table to the browser.
 - A test of row security must use one dedicated connection: a `pg` Pool drops a connection after an error, silently losing `SET ROLE`.
 - TipTap builds extensions once. Callbacks passed to an extension must read refs, not capture state.

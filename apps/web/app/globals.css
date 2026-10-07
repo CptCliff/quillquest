@@ -111,3 +111,9 @@ a { color: inherit; }
 @media (max-width: 760px) {
   .infocard { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; margin: 0; border-radius: 14px 14px 0 0; max-height: 60dvh; overflow: auto; box-shadow: 0 -8px 24px rgba(0, 0, 0, .25); }
 }
+
+/* Claude's suggested Skill chip is dashed until the writer taps it */
+.skill-chip.suggested { border-style: dashed; opacity: .85; }
+.gm-notes { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--bg); font-family: Georgia, serif; }
+.stepform { margin: 8px 0; }
+.stepform h4 { margin: 8px 0 4px; font-size: 13px; }

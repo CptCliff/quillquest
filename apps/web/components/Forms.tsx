@@ -14,8 +14,10 @@ export interface FieldSpec {
  * A small form: a few labelled fields and one button. Text fields and checkboxes clear after a successful save, so a form can be used again
  * (a second chapter, another proposal). Test ids are `${testId}-${key}` for fields and `${testId}-go` for the button.
  */
-export function StepForm({ testId, title, fields, submit, label = 'Save', disabled, run, busy }: {
+export function StepForm({ testId, title, fields, submit, label = 'Save', disabled, run, busy, secondary }: {
   testId: string; title?: string; fields: FieldSpec[]; label?: string; disabled?: boolean; busy?: boolean;
+  /** A second button that reads the current values without saving them (for example, asking Claude to check a draft). */
+  secondary?: { label: string; testId: string; onClick: (values: Record<string, string | boolean>) => Promise<unknown> };
   submit: (values: Record<string, string | boolean>) => Promise<unknown>;
   run: (fn: () => Promise<unknown>) => Promise<void>;
 }) {
@@ -46,6 +48,7 @@ export function StepForm({ testId, title, fields, submit, label = 'Save', disabl
         )
       ))}
       <button type="submit" data-testid={`${testId}-go`} disabled={disabled || busy}>{label}</button>
+      {secondary && <button type="button" data-testid={`${testId}-${secondary.testId}`} disabled={disabled || busy} onClick={() => run(() => secondary.onClick(Object.fromEntries(fields.map((f) => [f.key, val(f)]))))}>{secondary.label}</button>}
     </form>
   );
 }

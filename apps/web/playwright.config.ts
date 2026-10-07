@@ -18,7 +18,7 @@ export default defineConfig({
       command: 'pnpm --filter @quillquest/sync dev',
       port: 1234,
       reuseExistingServer: false,
-      env: { PORT: '1234', DATA_DIR: dataDir, QUILLQUEST_DEV_SECRET: 'e2e-secret', QUILLQUEST_DEV_AUTH: '1', QUILLQUEST_DEV_PGLITE: '1', QUILLQUEST_DEV_DICE: '1' },
+      env: { PORT: '1234', DATA_DIR: dataDir, QUILLQUEST_DEV_SECRET: 'e2e-secret', QUILLQUEST_DEV_AUTH: '1', QUILLQUEST_DEV_PGLITE: '1', QUILLQUEST_DEV_DICE: '1', QUILLQUEST_LLM: 'fake' },
     },
     {
       command: 'pnpm exec next dev -p 3100',

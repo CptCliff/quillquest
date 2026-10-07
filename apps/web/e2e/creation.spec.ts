@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { api, createTable, join } from './helpers';
 
-const paragraphs = (p: Page) => p.locator('.story p');
+const paragraphs = (p: Page) => p.locator('.story-pane .story p');
 /** Add a paragraph of your own at the end of the story. */
 async function write(page: Page, text: string, first = false) {
   if (first) await paragraphs(page).first().click();

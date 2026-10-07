@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type * as Y from 'yjs';
 import type { Editor } from '@tiptap/core';
-import { needsAttention, type CanonEntry, type Character, type CreationState, type Skill } from '@quillquest/rules';
+import { needsAttention, type CanonEntry, type Character, type ConvictionLogEntry, type CreationState, type PublicNpc, type Skill } from '@quillquest/rules';
 import { ApiFailure, type AccountApi, type GameApi, type LedgerCard } from '../lib/game-api';
 import { useYMap } from '../lib/use-ymap';
 import { InfoCard, type OpenCard } from './InfoCard';
@@ -29,10 +29,12 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
   const creation = useYMap<CreationState>(doc.getMap('creation'));
   const canon = useYMap<CanonEntry>(doc.getMap('canon'));
   const campaignMap = useYMap<unknown>(doc.getMap('campaign'));
+  const npcs = useYMap<PublicNpc>(doc.getMap('npcs'));
+  const convictionLog = useYMap<ConvictionLogEntry>(doc.getMap('convictionLog'));
   const zero = useMemo<ZeroState>(() => ({
-    creation, canon, phase: (campaignMap.phase as string | undefined) ?? 'sessionZero',
+    creation, canon, npcs, convictionLog, phase: (campaignMap.phase as string | undefined) ?? 'sessionZero',
     crossings: (campaignMap.crossings as ZeroState['crossings'] | undefined) ?? [], overrides: (campaignMap.overrides as ZeroState['overrides'] | undefined) ?? [],
-  }), [creation, canon, campaignMap]);
+  }), [creation, canon, npcs, convictionLog, campaignMap]);
   const cards = useMemo(() => Object.values(ledger).sort((a, b) => a.seq - b.seq), [ledger]);
   const mine = useMemo(() => Object.values(characters).find((c) => c.ownerId === me.id) ?? null, [characters, me.id]);
   const attention = !me.left && cards.some((c) => needsAttention(c, { id: me.id, role: me.role }));
@@ -81,6 +83,12 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
     );
   }, [game, onNotice]);
 
+  // Claude's half of the Skill chip. Players only (the GM has no sheet); any failure, cap or "not set up" simply means no suggestion.
+  const suggestSkill = useCallback(async (sentence: string): Promise<string | null> => {
+    if (latest.current.mine === null) return null;
+    try { const r = await game.ask('skillMatch', { sentence }); return (r.suggestion.draft as { skill: string | null }).skill; } catch { return null; }
+  }, [game]);
+
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging.current) return;
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -109,7 +117,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
       <main data-tab={tab} style={{ ['--split' as string]: `${split}%` }} onPointerMove={onPointerMove} onPointerUp={endDrag}>
         <section className="story-pane" aria-label="Story pane">
           <StoryEditor doc={doc} provider={provider} me={me} onEditor={setEditor} onNotice={onNotice} mySkills={mySkills}
-            onOpenAuthor={openAuthor} onChipInfo={chipInfo} onChipRoll={chipRoll} lookupInk={lookupInk} inkVersion={inkVersion} />
+            onOpenAuthor={openAuthor} onChipInfo={chipInfo} onChipRoll={chipRoll} onSuggest={me.role === 'gm' || me.left ? undefined : suggestSkill} lookupInk={lookupInk} inkVersion={inkVersion} />
         </section>
         <div className="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" data-testid="divider"
           onPointerDown={(e) => { dragging.current = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }} />

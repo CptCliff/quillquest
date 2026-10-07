@@ -1,4 +1,5 @@
-import type { Character, ConcessionKind, Draft, DiceView, OutcomePrompt, PublicCard } from '@quillquest/rules';
+import type { Character, ConcessionKind, Draft, DiceView, Nomination, Npc, NpcField, OutcomePrompt, PublicCard } from '@quillquest/rules';
+import type { Draft as AiDraft, SuggestionKind } from '@quillquest/prompts';
 
 export type LedgerCard = PublicCard & { seq: number };
 
@@ -23,6 +24,10 @@ export type CardPatchBody = Partial<{
   threat: string | null; shiftKeys: string[]; manualShifts: { ladder: string; delta: 1 | -1; source: string; reason: string }[];
   skillName: string; gmMarkedBig: boolean;
 }>;
+
+export interface Settings { themes: string; faces: string[]; cap: number; sessionNo: number; used: number; configured: boolean }
+export interface SuggestionRow { id: string; userId: string; kind: SuggestionKind; input: unknown; output: unknown; status: 'shown' | 'used' | 'edited' | 'dismissed' | 'failed'; sessionNo: number; provider: string; createdAt: string }
+export interface AskResult { suggestion: { id: string; kind: SuggestionKind; draft: AiDraft; cached?: boolean }; remaining: number }
 
 export type TokenSource = () => Promise<string>;
 
@@ -89,6 +94,20 @@ export class GameApi {
   draft = () => this.call<{ draft: Draft; problems: string[] }>('GET', '/draft');
   saveDraft = (draft: Draft) => this.call<{ draft: Draft; problems: string[] }>('PUT', '/draft', draft);
   importDraft = () => this.call<{ done: true }>('POST', '/draft/import');
+  // ---- the Director and Claude -----------------------------------------------------------------------------------------
+  director = () => this.call<{ nominations: Nomination[]; npcs: Npc[]; settings: Settings }>('GET', '/director');
+  saveSettings = (s: { themes?: string; faces?: string[]; cap?: number }) => this.call<{ themes: string; faces: string[]; cap: number }>('PUT', '/settings', s);
+  startSession = () => this.call<{ sessionNo: number }>('POST', '/session/start');
+  nominate = (b: { characterId: string; kind: string; beliefId?: string; note: string }) => this.call<unknown>('POST', '/conviction/nominate', b);
+  awardNomination = (nominationId: string) => this.call<unknown>('POST', '/conviction/award', { nominationId });
+  awardDirect = (b: { characterId: string; kind: string; beliefId?: string; note: string }) => this.call<unknown>('POST', '/conviction/award', b);
+  declineNomination = (nominationId: string) => this.call<unknown>('POST', '/conviction/decline', { nominationId });
+  createNpc = (name: string) => this.call<Npc>('POST', '/npcs', { name });
+  editNpc = (id: string, patch: Partial<Pick<Npc, 'name' | 'skills' | 'beliefs' | 'notes'>>) => this.call<Npc>('PATCH', `/npcs/${id}`, patch);
+  revealNpc = (id: string, field: NpcField) => this.call<Npc>('POST', `/npcs/${id}/reveal`, { field });
+  ask = (kind: SuggestionKind, params: Record<string, unknown>) => this.call<AskResult>('POST', `/llm/${kind}`, params);
+  suggestions = () => this.call<{ suggestions: SuggestionRow[] }>('GET', '/suggestions');
+  suggestionStatus = (id: string, status: 'used' | 'edited' | 'dismissed') => this.call<{ updated: true }>('POST', `/suggestions/${id}/status`, { status });
   layDown = (characterId: string, burdenId: string, body: { kind: 'trait' | 'beliefRewrite'; text: string }) =>
     this.call<{ character: Character }>('POST', `/characters/${characterId}/burdens/${burdenId}/lay-down`, body);
 }
