@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type * as Y from 'yjs';
 import type { Editor } from '@tiptap/core';
-import { needsAttention, type Character, type Skill } from '@quillquest/rules';
+import { needsAttention, type CanonEntry, type Character, type CreationState, type Skill } from '@quillquest/rules';
 import { ApiFailure, type AccountApi, type GameApi, type LedgerCard } from '../lib/game-api';
 import { useYMap } from '../lib/use-ymap';
 import { InfoCard, type OpenCard } from './InfoCard';
-import { NotesPane, type NotesTab } from './NotesPane';
+import { NotesPane, type NotesTab, type ZeroState } from './NotesPane';
 import { StoryEditor, type Me } from './StoryEditor';
 
 const SPLIT_KEY = 'qq.split';
@@ -26,6 +26,13 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
 }) {
   const ledger = useYMap<LedgerCard>(doc.getMap('ledger'));
   const characters = useYMap<Character>(doc.getMap('characters'));
+  const creation = useYMap<CreationState>(doc.getMap('creation'));
+  const canon = useYMap<CanonEntry>(doc.getMap('canon'));
+  const campaignMap = useYMap<unknown>(doc.getMap('campaign'));
+  const zero = useMemo<ZeroState>(() => ({
+    creation, canon, phase: (campaignMap.phase as string | undefined) ?? 'sessionZero',
+    crossings: (campaignMap.crossings as ZeroState['crossings'] | undefined) ?? [], overrides: (campaignMap.overrides as ZeroState['overrides'] | undefined) ?? [],
+  }), [creation, canon, campaignMap]);
   const cards = useMemo(() => Object.values(ledger).sort((a, b) => a.seq - b.seq), [ledger]);
   const mine = useMemo(() => Object.values(characters).find((c) => c.ownerId === me.id) ?? null, [characters, me.id]);
   const attention = !me.left && cards.some((c) => needsAttention(c, { id: me.id, role: me.role }));
@@ -111,7 +118,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
             onSkill={(characterId, skill) => setOpenCard({ kind: 'skill', characterId, skill })} onOpenSheet={openSheet} />}
           <NotesPane tab={notesTab} onTab={setNotesTab} cards={cards} characters={characters} me={me} game={game} accounts={accounts} campaign={campaign}
             editor={editor} onNotice={onNotice} openCharacter={(id) => setOpenCard({ kind: 'character', characterId: id })}
-            openSkill={(characterId, skill) => setOpenCard({ kind: 'skill', characterId, skill })} focusSheet={focusSheet} attention={attention}
+            openSkill={(characterId, skill) => setOpenCard({ kind: 'skill', characterId, skill })} focusSheet={focusSheet} attention={attention} zero={zero}
             onLeft={() => window.location.assign('/')} />
         </section>
       </main>

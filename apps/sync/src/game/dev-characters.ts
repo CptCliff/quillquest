@@ -1,8 +1,8 @@
 import { newCharacter, type Character } from '@quillquest/rules';
 
 /**
- * TEMPORARY. Until character creation (M5), a player who joins gets a ready-made starter character so cards have Skills,
- * Beliefs and gear to draw on. This file is the one place to replace.
+ * Dev only. The preset dev users (Ilse, Sella, Rook) keep ready-made sheets so earlier tests and demos work without replaying
+ * session zero. Everyone else starts with a blank character and creates it (M5).
  */
 type Template = (id: (s: string) => string) => Partial<Character>;
 
@@ -44,19 +44,13 @@ const TEMPLATES: Record<'ilse' | 'sella' | 'rook', Template> = {
     traits: [trait(k('t1'), 'Light Fingers'), trait(k('t2'), 'Owes the Wrens', true)],
   }),
 };
-const ORDER = ['ilse', 'sella', 'rook'] as const;
 
 function build(userId: string, name: string, key: keyof typeof TEMPLATES | null): Character {
-  const base: Character = { ...newCharacter(`${userId}-pc`, name), ownerId: userId, origin: 'Starter character (until character creation arrives)' };
+  const base: Character = { ...newCharacter(`${userId}-pc`, name), ownerId: userId, origin: 'Ready-made dev character' };
   return key ? { ...base, ...TEMPLATES[key]((s) => `${userId}-${s}`) } : base;
 }
 
 /** The preset dev users keep the sheets they always had (ids like `ilse-pc`), so earlier tests and demos are unchanged. */
 export function seedDevCharacter(userId: string): Character | null {
   return userId in TEMPLATES ? build(userId, userId[0]!.toUpperCase() + userId.slice(1), userId as keyof typeof TEMPLATES) : null;
-}
-
-/** A new player's starter character: the next template in turn (Ilse's, Sella's, Rook's), then a blank sheet. */
-export function starterCharacter(userId: string, displayName: string, index: number): Character {
-  return build(userId, displayName, ORDER[index] ?? null);
 }

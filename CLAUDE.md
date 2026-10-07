@@ -31,12 +31,18 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   campaigns, memberships, invites and colors are in Postgres (`packages/db`); the sync server checks membership on every
   connection and route and takes the role from the membership, never the token. Info cards and Skill chips are in the web app.
   `docs/m4-notes.md`.
-- Test counts: 25 story, 180 rules, 24 db, 76 sync, 3 web, 15 Playwright.
-- Next: M5 (session zero: character creation). It replaces the starter characters.
+- M5 session zero: done. Creation is pure rules in `packages/rules/src/creation-flow.ts`; the server sequences it
+  (`apps/sync/src/game/creation.ts`, `GameService.creationAct`) and publishes public `creation`, `canon` and `campaign` Yjs maps. Characters
+  are `creating` or `ready`; a character still creating cannot roll (409 NOT_READY) until its check passes or the GM overrides (logged).
+  Solo drafts are private documents `<campaign>~draft~<user>` (own table `draft_documents`). `docs/m5-notes.md`.
+- Test counts: 25 story, 240 rules, 25 db, 91 sync, 3 web, 18 Playwright.
+- Next: M6 (Claude suggestions, Belief check, Codex, Director tools). Interface wish for the design pass: players can resize AND rearrange panes.
 
 ## Gotchas
 - Dev sign-in is a signed token from `/api/dev-token`, only with `QUILLQUEST_DEV_AUTH=1` (and `NEXT_PUBLIC_DEV_AUTH=1` for the web list). It must never be set in production; the server refuses to start if it is. Real sign-in is Supabase.
-- Characters are starter templates for now (`apps/sync/src/game/dev-characters.ts`); M5 replaces them.
+- Preset dev users (ilse, sella, rook) have ready-made sheets (`apps/sync/src/game/dev-characters.ts`); every other new player starts blank and in creation. Mira, Tobin and Wren are dev users for creation tests.
+- A campaign saved before M5 is read as already `playing` with ready characters (`normalizeState`).
+- A paragraph is "posted" by naming it; creation steps never lock prose. Cloned Yjs elements cannot be read until integrated: read the original's attributes first.
 - Row-level security is on with no policies: all data access goes through the sync server. Never expose a table to the browser.
 - A test of row security must use one dedicated connection: a `pg` Pool drops a connection after an error, silently losing `SET ROLE`.
 - TipTap builds extensions once. Callbacks passed to an extension must read refs, not capture state.

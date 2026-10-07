@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { Character } from '@quillquest/rules';
+import type { Character, CreationState } from '@quillquest/rules';
 import { ApiFailure, type AccountApi, type GameApi } from '../lib/game-api';
 import { SheetBody, Tokens } from './Sheet';
 import type { Me } from './StoryEditor';
@@ -23,8 +23,8 @@ function LayDown({ character, burdenId, api, onNotice }: { character: Character;
 }
 
 /** Open table: everyone sees every player character's full sheet (design plan 5.4). */
-export function Roster({ characters, me, api, accounts, campaign, onNotice, onSkill, onLeft, focus }: {
-  characters: Record<string, Character>; me: Me; api: GameApi; accounts: AccountApi; campaign: string;
+export function Roster({ characters, creation, me, api, accounts, campaign, onNotice, onSkill, onLeft, focus }: {
+  characters: Record<string, Character>; creation: Record<string, CreationState>; me: Me; api: GameApi; accounts: AccountApi; campaign: string;
   onNotice: (m: string) => void; onSkill: (characterId: string, skill: string) => void; onLeft: () => void; focus?: string | null;
 }) {
   const list = Object.values(characters);
@@ -39,7 +39,7 @@ export function Roster({ characters, me, api, accounts, campaign, onNotice, onSk
         const mine = c.ownerId === me.id;
         return (
           <article key={c.id} className={`sheet${focus === c.id ? ' focus' : ''}`} data-testid="sheet" data-character={c.id} ref={(el) => { if (el && focus === c.id) el.scrollIntoView({ block: 'nearest' }); }}>
-            <h3>{c.name}{c.left ? ' (left)' : ''} <Tokens n={c.conviction} /></h3>
+            <h3>{c.name}{c.left ? ' (left)' : ''} {creation[c.id]?.status === 'creating' && <span className="badge" data-testid="creating-badge">creating</span>} <Tokens n={c.conviction} /></h3>
             <SheetBody c={c} onSkill={(s) => onSkill(c.id, s)}
               burdenExtra={mine || me.role === 'gm' ? (id) => <LayDown character={c} burdenId={id} api={api} onNotice={onNotice} /> : undefined} />
           </article>

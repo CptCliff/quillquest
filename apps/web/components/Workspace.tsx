@@ -7,6 +7,7 @@ import { AccountApi, ApiClient, ApiFailure, GameApi } from '../lib/game-api';
 import { useSession } from '../lib/session';
 import { SignIn } from './SignIn';
 import type { Me } from './StoryEditor';
+import { DraftTable } from './DraftTable';
 import { Table } from './Table';
 
 const REJECTED_PREFIX = 'rejected:';
@@ -18,7 +19,7 @@ interface Connection { doc: Y.Doc; provider: HocuspocusProvider }
  * Gets you to the table: signed in, a member of this campaign, then a live connection. The role and ink come from your
  * membership, which the server decides; this only shows what it says.
  */
-export function Workspace({ campaign }: { campaign: string }) {
+export function Workspace({ campaign, draft = false }: { campaign: string; draft?: boolean }) {
   const session = useSession();
   const client = useMemo(() => new ApiClient(session.getToken), [session.getToken]);
   const accounts = useMemo(() => new AccountApi(client), [client]);
@@ -56,7 +57,7 @@ export function Workspace({ campaign }: { campaign: string }) {
     let alive = true;
     const doc = new Y.Doc();
     const provider = new HocuspocusProvider({
-      url: SYNC_URL, name: campaign, document: doc, token: () => session.getToken(),
+      url: SYNC_URL, name: draft && me ? `${campaign}~draft~${me.id}` : campaign, document: doc, token: () => session.getToken(),
       onStatus: ({ status }) => alive && setStatus(status),
       onAuthenticationFailed: () => alive && setGate('denied'),
       onClose: ({ event }) => {
@@ -77,7 +78,7 @@ export function Workspace({ campaign }: { campaign: string }) {
     setConn({ doc, provider });
     return () => { alive = false; provider.destroy(); doc.destroy(); setConn(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me?.id, campaign, epoch]);
+  }, [me?.id, campaign, epoch, draft]);
 
   useEffect(() => {
     if (!notice) return;
@@ -90,6 +91,7 @@ export function Workspace({ campaign }: { campaign: string }) {
   if (gate === 'denied') return <main className="home" data-testid="denied"><h1>Not your table</h1><p>You are not a member of this campaign. Ask its GM for an invite link.</p><Link href="/">Your campaigns</Link></main>;
   if (gate === 'error') return <main className="home"><p role="alert" className="notice">Could not open this campaign. Try again in a moment.</p><Link href="/">Your campaigns</Link></main>;
   if (!me || !conn) return <main className="home"><p className="muted">Connecting…</p></main>;
+  if (draft) return <DraftTable key={`${me.id}-${epoch}`} doc={conn.doc} provider={conn.provider} me={me} campaign={campaign} title={title} status={status} game={game} onNotice={setNotice} notice={notice} />;
   return <Table key={`${me.id}-${epoch}`} doc={conn.doc} provider={conn.provider} me={me} title={title} campaign={campaign} status={status}
     peers={peers} game={game} accounts={accounts} onNotice={setNotice} notice={notice} />;
 }

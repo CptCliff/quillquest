@@ -1,24 +1,30 @@
 'use client';
 import type { Editor } from '@tiptap/core';
-import type { Character } from '@quillquest/rules';
+import type { CanonEntry, CheckOverride, Character, CreationState, CrossingProposal } from '@quillquest/rules';
 import type { AccountApi, GameApi, LedgerCard } from '../lib/game-api';
+import { Creation } from './Creation';
 import { Ledger } from './Ledger';
 import { Roster } from './Roster';
+import { SessionZero } from './SessionZero';
 import { SuggestionsPanel } from './SuggestionsPanel';
 import type { Me } from './StoryEditor';
 import { TablePanel } from './TablePanel';
 
-export type NotesTab = 'ledger' | 'codex' | 'roster' | 'director';
+export type NotesTab = 'ledger' | 'create' | 'codex' | 'roster' | 'director';
+
+/** Session-zero state from the server-written maps. */
+export interface ZeroState { creation: Record<string, CreationState>; canon: Record<string, CanonEntry>; phase: string; crossings: CrossingProposal[]; overrides: CheckOverride[] }
 
 /** The Notes pane (design plan 5.2): Ledger and Roster are live; the GM's tab holds the table and invites; Codex arrives in M6. */
-export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, campaign, editor, onNotice, openCharacter, openSkill, focusSheet, attention, onLeft }: {
+export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, campaign, editor, onNotice, openCharacter, openSkill, focusSheet, attention, onLeft, zero }: {
   tab: NotesTab; onTab: (t: NotesTab) => void; cards: LedgerCard[]; characters: Record<string, Character>; me: Me; game: GameApi; accounts: AccountApi;
   campaign: string; editor: Editor | null; onNotice: (m: string) => void; openCharacter: (characterId: string) => void;
-  openSkill: (characterId: string, skill: string) => void; focusSheet: string | null; attention: boolean; onLeft: () => void;
+  openSkill: (characterId: string, skill: string) => void; focusSheet: string | null; attention: boolean; onLeft: () => void; zero: ZeroState;
 }) {
   const mine = Object.values(characters).find((c) => c.ownerId === me.id) ?? null;
   const tabs: { id: NotesTab; label: string; show: boolean }[] = [
     { id: 'ledger', label: attention ? 'Ledger •' : 'Ledger', show: true },
+    { id: 'create', label: me.role === 'gm' || zero.creation[mine?.id ?? '']?.status !== 'creating' ? 'Creation' : 'Creation •', show: me.role !== 'gm' },
     { id: 'codex', label: 'Codex', show: true },
     { id: 'roster', label: 'Roster', show: true },
     { id: 'director', label: me.role === 'gm' ? 'Director' : '', show: me.role === 'gm' },
@@ -36,9 +42,21 @@ export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, c
           {editor && <SuggestionsPanel editor={editor} userId={me.id} />}
         </>
       )}
-      {tab === 'roster' && <Roster characters={characters} me={me} api={game} accounts={accounts} campaign={campaign} onNotice={onNotice} onSkill={openSkill} onLeft={onLeft} focus={focusSheet} />}
-      {tab === 'codex' && <p className="muted">The Canon and the Conviction log arrive with the Director tools (M6).</p>}
-      {tab === 'director' && me.role === 'gm' && <TablePanel accounts={accounts} campaign={campaign} onNotice={onNotice} />}
+      {tab === 'create' && <Creation me={me} characters={characters} creation={zero.creation} crossings={zero.crossings} phase={zero.phase} game={game} editor={editor} onNotice={onNotice} campaign={campaign} />}
+      {tab === 'roster' && <Roster characters={characters} creation={zero.creation} me={me} api={game} accounts={accounts} campaign={campaign} onNotice={onNotice} onSkill={openSkill} onLeft={onLeft} focus={focusSheet} />}
+      {tab === 'codex' && (
+        <section aria-label="Canon" data-testid="canon">
+          <h3>Canon</h3>
+          {Object.keys(zero.canon).length === 0 && <p className="muted">Nothing is established yet. The full Codex and the Conviction log arrive with the Director tools (M6).</p>}
+          <ul>{Object.values(zero.canon).map((e) => <li key={e.id} data-testid="canon-entry">{e.text}</li>)}</ul>
+        </section>
+      )}
+      {tab === 'director' && me.role === 'gm' && (
+        <>
+          <SessionZero game={game} characters={characters} creation={zero.creation} canon={zero.canon} phase={zero.phase} overrides={zero.overrides} onNotice={onNotice} />
+          <TablePanel accounts={accounts} campaign={campaign} onNotice={onNotice} />
+        </>
+      )}
     </>
   );
 }

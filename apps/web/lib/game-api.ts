@@ -1,4 +1,4 @@
-import type { Character, ConcessionKind, DiceView, OutcomePrompt, PublicCard } from '@quillquest/rules';
+import type { Character, ConcessionKind, Draft, DiceView, OutcomePrompt, PublicCard } from '@quillquest/rules';
 
 export type LedgerCard = PublicCard & { seq: number };
 
@@ -83,6 +83,12 @@ export class GameApi {
   written = (id: string, body: { outcomeParagraphId: string; woundName?: string; woundLevel?: string; burdenName?: string }) =>
     this.call<{ card: PublicCard }>('POST', `/cards/${id}/written`, body);
   retcon = (id: string) => this.call<{ card: PublicCard }>('POST', `/cards/${id}/retcon`);
+  /** One session-zero step; the server's rules say whether it is allowed. */
+  step = (name: string, body: Record<string, unknown> = {}) => this.call<{ done: true }>('POST', `/creation/${name}`, body);
+  check = (characterId: string) => this.call<{ passed: boolean; problems: { code: string; message: string }[] }>('GET', `/creation/check/${encodeURIComponent(characterId)}`);
+  draft = () => this.call<{ draft: Draft; problems: string[] }>('GET', '/draft');
+  saveDraft = (draft: Draft) => this.call<{ draft: Draft; problems: string[] }>('PUT', '/draft', draft);
+  importDraft = () => this.call<{ done: true }>('POST', '/draft/import');
   layDown = (characterId: string, burdenId: string, body: { kind: 'trait' | 'beliefRewrite'; text: string }) =>
     this.call<{ character: Character }>('POST', `/characters/${characterId}/burdens/${burdenId}/lay-down`, body);
 }

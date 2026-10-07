@@ -14,7 +14,7 @@ const nameOf = (characters: Record<string, Character>, id: string | null) => (id
 // ---- helpers over the editor ------------------------------------------------------------------------------------------
 
 interface MyParagraph { id: string; text: string; locked: boolean }
-function myParagraphs(editor: Editor | null, meId: string): MyParagraph[] {
+export function myParagraphs(editor: Editor | null, meId: string): MyParagraph[] {
   const out: MyParagraph[] = [];
   editor?.state.doc.forEach((n) => {
     if (n.attrs.paragraphId && n.attrs.authorId === meId) out.push({ id: n.attrs.paragraphId, text: n.textContent.slice(0, 48) || '(empty)', locked: !!n.attrs.locked });
@@ -30,7 +30,7 @@ function currentParagraph(editor: Editor | null, meId: string): string | null {
   return myParagraphs(editor, meId).at(-1)?.id ?? null;
 }
 
-function useAct(onNotice: Notice) {
+export function useAct(onNotice: Notice) {
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
