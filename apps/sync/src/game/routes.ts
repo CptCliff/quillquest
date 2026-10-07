@@ -12,6 +12,8 @@ import type { DirectorService } from './director';
 import { handleDirector } from './director-routes';
 import type { BattleService } from './battles';
 import { handleBattles } from './battle-routes';
+import { defaultLayout, sanitize, validateLayout } from '@quillquest/layout';
+import type { Device, LayoutStore } from './layouts';
 import type { Notifier } from '../notify/notifier';
 import type { NotifyStore } from '../notify/store';
 
@@ -21,6 +23,7 @@ export interface RouteOptions {
   battles: BattleService;
   /** Notification preferences and the dev mail routes need these; absent without a mail setup. */
   notifyStore?: NotifyStore;
+  layouts?: LayoutStore;
   dev?: { mail?: { sent: () => unknown[]; advance: (ms: number) => void; tick: () => Promise<unknown> } };
   dice: DiceProvider;
   providers: AuthProvider[];
@@ -183,6 +186,25 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
     if (rest[0] === 'spotlight' && method === 'POST') {
       if (rest[1] === 'pass') return ok(await svc.passSpotlight(campaign, actor, str((await readJson(req)).to, 'to')));
       if (rest[1] === 'take') return ok(await svc.takeSpotlight(campaign, actor));
+    }
+    // Each person's workspace layout. You can only ever read or change your own, and the Director panel is never in a player's.
+    if (rest[0] === 'layout' && !rest[1]) {
+      if (!o.layouts) throw new GameError(501, 'NOT_CONFIGURED', 'Saved layouts are not set up on this server');
+      const device = url.searchParams.get('device');
+      if (device !== 'wide' && device !== 'phone') throw new GameError(400, 'BAD_INPUT', 'device is wide or phone');
+      const role = actor.role;
+      if (method === 'GET') {
+        const saved = await o.layouts.get(campaign, actor.id, device as Device);
+        const v = saved ? validateLayout(saved) : null;
+        return ok({ layout: v?.ok ? sanitize(v.layout, role) : defaultLayout(role), saved: !!v?.ok });
+      }
+      if (method === 'PUT') {
+        const v = validateLayout((await readJson(req)).layout, role);
+        if (!v.ok) throw new GameError(400, 'BAD_LAYOUT', v.error);
+        await o.layouts.put(campaign, actor.id, device as Device, v.layout);
+        return ok({ layout: v.layout });
+      }
+      if (method === 'DELETE') { await o.layouts.del(campaign, actor.id, device as Device); return ok({ layout: defaultLayout(role), saved: false }); }
     }
     if (rest[0] === 'prefs') {
       if (!o.notifyStore) throw new GameError(501, 'NOT_CONFIGURED', 'Notifications are not set up on this server');

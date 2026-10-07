@@ -21,6 +21,7 @@ import { providerFromEnv, type LlmProvider } from './llm';
 import { FakeMailer, mailerFromEnv, type Mailer } from './mail';
 import { BattleService } from './game/battles';
 import { Notifier } from './notify/notifier';
+import { MemoryLayoutStore, PgLayoutStore } from './game/layouts';
 import { MemoryNotifyStore, PgNotifyStore, type NotifyStore } from './notify/store';
 import { FileGameStore, MemoryGameStore, type GameStore } from './game/store';
 
@@ -145,6 +146,7 @@ export function createSyncServer(opts: SyncServerOptions) {
     notify: notifier ? (campaign, userId, n) => { void notifier.notify(campaign, userId, n).catch(() => undefined); } : undefined,
     gmOf: db ? async (campaign) => (await db.listMembers(campaign)).find((m) => m.role === 'gm')?.userId ?? null : undefined,
   });
+  const layoutStore = new MemoryLayoutStore();
   const docs = new HocuspocusDocPort(server.hocuspocus);
   const director = new DirectorService(service, { llm: opts.llm ?? null, log: (opts.game?.suggestions ?? (db ? new PgSuggestionLog(db) : new MemorySuggestionLog())), docs });
   const battles = new BattleService(service, { dice, docs, now: () => Date.now() + clockOffset });
@@ -160,7 +162,7 @@ export function createSyncServer(opts: SyncServerOptions) {
       if ((conn.context as { identity?: Identity } | undefined)?.identity?.id === userId) conn.close({ code: 1000, reason: MEMBERSHIP_CHANGED });
     });
   };
-  game = (req, res) => handleGameRequest(req, res, { service, director, battles, notifyStore: notifier ? notifyStore : undefined, dev: opts.mail?.devRoutes && mailer instanceof FakeMailer ? { mail: { sent: () => mailer.sent, advance: (ms) => { clockOffset += ms; }, tick: jobs } } : undefined, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
+  game = (req, res) => handleGameRequest(req, res, { service, director, battles, layouts: db ? new PgLayoutStore(db) : layoutStore, notifyStore: notifier ? notifyStore : undefined, dev: opts.mail?.devRoutes && mailer instanceof FakeMailer ? { mail: { sent: () => mailer.sent, advance: (ms) => { clockOffset += ms; }, tick: jobs } } : undefined, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
   return Object.assign(server, { game: service, director, battles, notifier, jobs, mailer });
 }
 

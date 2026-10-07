@@ -136,4 +136,19 @@ export const MIGRATIONS: Migration[] = [
       alter table notification_queue enable row level security;
     `,
   },
+  {
+    // Each person's arrangement of the table's panels, per campaign and form factor (interface design pass).
+    name: '0005_layouts',
+    sql: `
+      create table layouts (
+        campaign_id text not null references campaigns (id) on delete cascade,
+        user_id text not null references profiles (user_id),
+        device text not null check (device in ('wide', 'phone')),
+        layout jsonb not null,
+        updated_at timestamptz not null default now(),
+        primary key (campaign_id, user_id, device)
+      );
+      alter table layouts enable row level security;
+    `,
+  },
 ];

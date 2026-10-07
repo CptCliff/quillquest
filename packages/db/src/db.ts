@@ -253,6 +253,21 @@ export function createDb(sql: Sql, opts: DbOptions = {}) {
       if (r.rowCount === 0) throw new DbError('NOT_FOUND', 'No such suggestion');
     },
 
+    // ---- saved workspace layouts ---------------------------------------------------------------------------------------
+    async getLayout(campaignId: string, userId: string, device: 'wide' | 'phone'): Promise<unknown | null> {
+      const r = (await sql.query<{ layout: unknown }>('select layout from layouts where campaign_id = $1 and user_id = $2 and device = $3', [campaignId, userId, device])).rows[0];
+      return r ? r.layout : null;
+    },
+    async saveLayout(campaignId: string, userId: string, device: 'wide' | 'phone', layout: unknown): Promise<void> {
+      if (device !== 'wide' && device !== 'phone') throw new DbError('BAD_INPUT', 'device is wide or phone');
+      try {
+        await sql.query(`insert into layouts (campaign_id, user_id, device, layout) values ($1, $2, $3, $4::jsonb) on conflict (campaign_id, user_id, device) do update set layout = excluded.layout, updated_at = now()`, [campaignId, userId, device, JSON.stringify(layout)]);
+      } catch (e) { if (isForeignKeyViolation(e)) throw new DbError('NOT_FOUND', 'No such campaign'); throw e; }
+    },
+    async deleteLayout(campaignId: string, userId: string, device: 'wide' | 'phone'): Promise<void> {
+      await sql.query('delete from layouts where campaign_id = $1 and user_id = $2 and device = $3', [campaignId, userId, device]);
+    },
+
     async loadDraft(campaignId: string, userId: string): Promise<Uint8Array | null> {
       const r = (await sql.query<{ state: Uint8Array }>('select state from draft_documents where campaign_id = $1 and user_id = $2', [campaignId, userId])).rows[0];
       return r ? new Uint8Array(r.state) : null;

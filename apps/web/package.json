@@ -31,7 +31,8 @@
     "@quillquest/sync": "workspace:*",
     "@quillquest/rules": "workspace:*",
     "@supabase/supabase-js": "2.117.2",
-    "@quillquest/prompts": "workspace:*"
+    "@quillquest/prompts": "workspace:*",
+    "@quillquest/layout": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -19,7 +19,8 @@
     "jose": "^6.2.12",
     "@quillquest/db": "workspace:*",
     "pg": "^8.23.1",
-    "@quillquest/prompts": "workspace:*"
+    "@quillquest/prompts": "workspace:*",
+    "@quillquest/layout": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

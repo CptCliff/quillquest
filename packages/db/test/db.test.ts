@@ -196,7 +196,7 @@ describe('row-level security: deny by default', () => {
     `);
     await h.pg.exec('set role authenticated');
     try {
-      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents', 'gm_documents', 'suggestions', 'notification_prefs', 'notification_queue']) {
+      for (const t of ['profiles', 'campaigns', 'memberships', 'invites', 'game_state', 'documents', 'draft_documents', 'gm_documents', 'suggestions', 'notification_prefs', 'notification_queue', 'layouts']) {
         const { rows } = await h.pg.query(`select * from ${t}`);
         expect(rows, t).toEqual([]);
       }
@@ -300,6 +300,25 @@ describe('notifications: email, preferences and the queue', () => {
     expect(pending.filter((n) => n.campaignId === c.id).map((n) => [n.kind, n.text, n.link])).toEqual([['spotlight', 'Your turn', '/story/x?para=p1'], ['stall', 'Waiting', '/story/x?card=c1']]);
     await h.db.markNotificationsSent([a!.id]);
     expect((await h.db.pendingNotifications()).filter((n) => n.campaignId === c.id).map((n) => n.id)).toEqual([b!.id]);
+  });
+});
+
+describe('saved layouts', () => {
+  it('keeps one layout per person, campaign and device, replaces it on save, and can forget it', async () => {
+    const c = await h.db.createCampaign({ title: 'Layouts', gmUserId: 'gm' });
+    await h.db.ensureProfile('pat', 'Pat');
+    expect(await h.db.getLayout(c.id, 'pat', 'wide')).toBeNull();
+    await h.db.saveLayout(c.id, 'pat', 'wide', { v: 1, a: 1 });
+    await h.db.saveLayout(c.id, 'pat', 'wide', { v: 1, a: 2 });
+    await h.db.saveLayout(c.id, 'pat', 'phone', { v: 1, phone: true });
+    expect(await h.db.getLayout(c.id, 'pat', 'wide')).toEqual({ v: 1, a: 2 });
+    expect(await h.db.getLayout(c.id, 'pat', 'phone')).toEqual({ v: 1, phone: true });
+    expect(await h.db.getLayout(c.id, 'gm', 'wide')).toBeNull(); // someone else's slot
+    await h.db.deleteLayout(c.id, 'pat', 'wide');
+    expect(await h.db.getLayout(c.id, 'pat', 'wide')).toBeNull();
+    expect(await h.db.getLayout(c.id, 'pat', 'phone')).not.toBeNull();
+    await fails(h.db.saveLayout(c.id, 'pat', 'tablet' as never, {}), 'BAD_INPUT');
+    await fails(h.db.saveLayout('nope-nope', 'pat', 'wide', {}), 'NOT_FOUND');
   });
 });
 
