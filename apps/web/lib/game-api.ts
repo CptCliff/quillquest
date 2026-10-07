@@ -1,3 +1,4 @@
+import type { Layout } from '@quillquest/layout';
 import type { BattleDiceView, Character, ConcessionKind, Draft, DiceView, Nomination, Npc, NpcField, OutcomePrompt, PublicBattle, PublicCard } from '@quillquest/rules';
 import type { Draft as AiDraft, SuggestionKind } from '@quillquest/prompts';
 
@@ -130,6 +131,9 @@ export class GameApi {
   takeSpotlight = () => this.call<{ holder: string | null }>('POST', '/spotlight/take');
   prefs = () => this.call<{ mode: 'immediate' | 'digest' | 'off'; hasEmail: boolean }>('GET', '/prefs');
   savePrefs = (mode: 'immediate' | 'digest' | 'off') => this.call<{ mode: string }>('PUT', '/prefs', { mode });
+  layout = (device: 'wide' | 'phone') => this.call<{ layout: Layout; saved: boolean }>('GET', `/layout?device=${device}`);
+  saveLayout = (device: 'wide' | 'phone', layout: Layout) => this.call<{ layout: Layout }>('PUT', `/layout?device=${device}`, { layout });
+  resetLayout = (device: 'wide' | 'phone') => this.call<{ layout: Layout; saved: boolean }>('DELETE', `/layout?device=${device}`);
   layDown = (characterId: string, burdenId: string, body: { kind: 'trait' | 'beliefRewrite'; text: string }) =>
     this.call<{ character: Character }>('POST', `/characters/${characterId}/burdens/${burdenId}/lay-down`, body);
 }

@@ -40,8 +40,9 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   GM notes document `<campaign>~gm`, suggestion log and per-session cap. `docs/m6-notes.md`.
 - M7 battle, async, phone: done. `packages/rules/src/battle-flow.ts` and `spotlight.ts`, `apps/sync/src/game/battles.ts` + `battle-routes.ts`, the Mailer (`QUILLQUEST_MAIL=resend|log|fake|none`, `docs/mail-providers.md`),
   `apps/sync/src/notify/` (batching, presence, preferences, deep links), a 30-second background job (mail, push windows, stalls), public `battles` map. `docs/m7-notes.md`.
-- Test counts: 25 story, 279 rules, 15 prompts, 30 db, 131 sync, 3 web, 24 Playwright.
-- All seven milestones are done. Next: playtest, then the interface-design pass (players can resize AND rearrange panes), real Supabase sign-in, and a real mail and model key.
+- Interface design pass: done. `packages/layout` (the dock model), saved layouts (`layouts` table, `/layout` routes), design tokens and themes (`app/tokens.css`), the dock (`components/dock/`), and an axe-core accessibility audit in Playwright. `docs/m8-notes.md`.
+- Test counts: 25 story, 20 layout, 279 rules, 15 prompts, 31 db, 136 sync, 13 web, 35 Playwright.
+- All seven milestones and the design pass are done. Next: playtest, real Supabase sign-in, and a real mail and model key.
 
 ## Gotchas
 - Dev sign-in is a signed token from `/api/dev-token`, only with `QUILLQUEST_DEV_AUTH=1` (and `NEXT_PUBLIC_DEV_AUTH=1` for the web list). It must never be set in production; the server refuses to start if it is. Real sign-in is Supabase.
@@ -52,7 +53,8 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
 - Playwright runs the sync server with `QUILLQUEST_LLM=fake`, `QUILLQUEST_MAIL=fake` and `QUILLQUEST_DEV_MAIL=1`. Fake providers are refused in production. Tests move the notifier's clock through `/api/dev/mail/advance`.
 - A battle's roll lives in game state only; the `battles` map is words. Battle and card deep links are `?battle=`/`?card=` and the card elements carry `id=battle-<id>` / `card-<id>`.
 - The background job's `system` actor must never become `gmId` (guarded in `prepare`).
-- The Director tab holds a second editor (GM notes); scope story selectors to `.story-pane .story`.
+- The Director panel holds a second editor (GM notes); scope story selectors to `.story-pane .story`.
+- Panels never remount when moved: they live in persistent containers (`PanelHost`/`Slot`). Don't render a panel's content inside the dock tree itself. Colours come from `app/tokens.css`; `tokens.test.ts` must stay green. Pin `@axe-core/playwright`; run `pnpm e2e` for the audit.
 - Row-level security is on with no policies: all data access goes through the sync server. Never expose a table to the browser.
 - A test of row security must use one dedicated connection: a `pg` Pool drops a connection after an error, silently losing `SET ROLE`.
 - TipTap builds extensions once. Callbacks passed to an extension must read refs, not capture state.

@@ -1,5 +1,6 @@
 'use client';
 import type { Editor } from '@tiptap/core';
+import type { PanelId } from '@quillquest/layout';
 import type { CanonEntry, CheckOverride, Character, ConvictionLogEntry, CreationState, CrossingProposal, PublicBattle, PublicNpc } from '@quillquest/rules';
 import type { AccountApi, GameApi, LedgerCard } from '../lib/game-api';
 import { Battles } from './Battles';
@@ -17,27 +18,23 @@ export type NotesTab = 'ledger' | 'create' | 'codex' | 'roster' | 'director';
 /** Session-zero state from the server-written maps. */
 export interface ZeroState { creation: Record<string, CreationState>; canon: Record<string, CanonEntry>; phase: string; crossings: CrossingProposal[]; overrides: CheckOverride[]; npcs: Record<string, PublicNpc>; convictionLog: Record<string, ConvictionLogEntry>; battles: Record<string, PublicBattle> }
 
-/** The Notes pane (design plan 5.2): Ledger and Roster are live; the GM's tab holds the table and invites; Codex arrives in M6. */
-export function NotesPane({ tab, onTab, cards, characters, me, game, accounts, campaign, editor, onNotice, openCharacter, openSkill, focusSheet, attention, onLeft, zero }: {
-  tab: NotesTab; onTab: (t: NotesTab) => void; cards: LedgerCard[]; characters: Record<string, Character>; me: Me; game: GameApi; accounts: AccountApi;
+/** What each tab says: an attention dot on the Ledger when a card needs you, and on Creation while your character is being made. */
+export function panelLabels(me: Me, attention: boolean, creating: boolean): Record<PanelId, string> {
+  return { story: 'Story', ledger: attention ? 'Ledger •' : 'Ledger', create: creating ? 'Creation •' : 'Creation', codex: 'Codex', roster: 'Roster', director: 'Director', info: 'Card' };
+}
+
+/**
+ * The content of one of the table's notes panels (design plan 5.2). Where it is shown (which pane, which tab, left or right or below)
+ * is the dock's business, not this component's.
+ */
+export function NotesPanel({ panel: tab, cards, characters, me, game, accounts, campaign, editor, onNotice, openCharacter, openSkill, focusSheet, onLeft, zero }: {
+  panel: PanelId; cards: LedgerCard[]; characters: Record<string, Character>; me: Me; game: GameApi; accounts: AccountApi;
   campaign: string; editor: Editor | null; onNotice: (m: string) => void; openCharacter: (characterId: string) => void;
-  openSkill: (characterId: string, skill: string) => void; focusSheet: string | null; attention: boolean; onLeft: () => void; zero: ZeroState;
+  openSkill: (characterId: string, skill: string) => void; focusSheet: string | null; onLeft: () => void; zero: ZeroState;
 }) {
   const mine = Object.values(characters).find((c) => c.ownerId === me.id) ?? null;
-  const tabs: { id: NotesTab; label: string; show: boolean }[] = [
-    { id: 'ledger', label: attention ? 'Ledger •' : 'Ledger', show: true },
-    { id: 'create', label: me.role === 'gm' || zero.creation[mine?.id ?? '']?.status !== 'creating' ? 'Creation' : 'Creation •', show: me.role !== 'gm' },
-    { id: 'codex', label: 'Codex', show: true },
-    { id: 'roster', label: 'Roster', show: true },
-    { id: 'director', label: me.role === 'gm' ? 'Director' : '', show: me.role === 'gm' },
-  ];
   return (
     <>
-      <div className="note-tabs" role="tablist" aria-label="Notes">
-        {tabs.filter((t) => t.show).map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} data-testid={`tab-${t.id}`} onClick={() => onTab(t.id)}>{t.label}</button>
-        ))}
-      </div>
       {tab === 'ledger' && (
         <>
           <Battles battles={zero.battles} characters={characters} me={me} game={game} onNotice={onNotice} />

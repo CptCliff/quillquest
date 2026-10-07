@@ -100,22 +100,8 @@ test('only the GM sees the Director tab, and the GM opens no cards', async ({ br
   await expect(gm.getByTestId('new-roll')).toHaveCount(0);
 });
 
-test('the panes resize, remember their width, and stack as tabs on a phone', async ({ browser }) => {
+test('on a phone the panes stack as two tabs', async ({ browser }) => {
   const t = await createTable(['ilse', 'sella']);
-  const page = await join(browser, t, 'ilse');
-  const divider = page.getByTestId('divider');
-  const box = (await divider.boundingBox())!;
-  const before = (await page.locator('.story-pane').boundingBox())!.width;
-  await page.mouse.move(box.x + 3, box.y + 100);
-  await page.mouse.down();
-  await page.mouse.move(box.x - 250, box.y + 100, { steps: 5 });
-  await page.mouse.up();
-  const after = (await page.locator('.story-pane').boundingBox())!.width;
-  expect(after).toBeLessThan(before - 150);
-  await page.reload();
-  await expect(page.getByTestId('story')).toBeVisible();
-  expect(Math.abs((await page.locator('.story-pane').boundingBox())!.width - after)).toBeLessThan(5);
-
   const phone = await join(browser, t, 'sella', { width: 390, height: 780 });
   await expect(phone.getByRole('navigation', { name: 'Panes' })).toBeVisible();
   await expect(phone.locator('.notes-pane')).toBeHidden();

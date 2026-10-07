@@ -279,7 +279,7 @@ Full character sheets (open table); revealed parts of NPC sheets
 Director | 
 GM only | 
 Section 8
-A draggable divider sets the width of each pane; each person's setting is remembered.
+A draggable divider sets the width of each pane; each person's setting is remembered. (Built in the design pass as a dockable workspace: every panel can be dragged to any edge, stacked as tabs, resized, hidden and restored, and the arrangement is saved per person; see docs/m8-notes.md.)
 
 ### 5.3 Inline Skill chips
 As a writer types, the software looks for a Skill being used and offers an inline chip such as Sneak · Expert.

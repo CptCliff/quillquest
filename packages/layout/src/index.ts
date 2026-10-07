@@ -138,6 +138,25 @@ export function movePanel(l: Layout, panel: PanelId, targetGroupId: string, zone
   return normalize(out);
 }
 
+/** Docks a panel along one whole edge of the workspace (the keyboard-friendly move: no target pane needed). */
+export function dockToEdge(l: Layout, panel: PanelId, edge: Exclude<Zone, 'center'>): Layout {
+  if (!PANELS.includes(panel)) return l;
+  const src = findGroup(l, panel);
+  if (src && src.tabs.length === 1 && l.root.kind === 'group') return l;
+  const rest = detach(l, panel);
+  const group: Group = { kind: 'group', id: nextId(rest, 'g'), tabs: [panel], active: panel };
+  const dir: 'row' | 'col' = edge === 'left' || edge === 'right' ? 'row' : 'col';
+  const before = edge === 'left' || edge === 'top';
+  const share = 30;
+  const root = tidy(rest.root) ?? rest.root;
+  let next: Node;
+  if (root.kind === 'split' && root.dir === dir) {
+    const sizes = root.sizes.map((s) => (s * (100 - share)) / 100);
+    next = { ...root, sizes: before ? [share, ...sizes] : [...sizes, share], children: before ? [group, ...root.children] : [...root.children, group] };
+  } else next = { kind: 'split', id: nextId(rest, 's'), dir, sizes: before ? [share, 100 - share] : [100 - share, share], children: before ? [group, root] : [root, group] };
+  return normalize({ v: 1, root: next, hidden: rest.hidden });
+}
+
 /** Moves the divider after child `index` of a split by `delta` percent, never squeezing either neighbour below the minimum. */
 export function resizeSplit(l: Layout, splitId: string, index: number, delta: number): Layout {
   let changed = false;

@@ -25,11 +25,8 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .notice { background: var(--warn-bg); color: var(--warn-fg); padding: var(--space-2) var(--space-4); font: var(--text-m) var(--font-ui); border-bottom: 1px solid var(--warn-border); }
 .tabs { display: none; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
 
-main { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--split, 62%) 6px 1fr; }
-.story-pane, .notes-pane { overflow: auto; padding: 16px 24px; }
-.notes-pane { background: var(--panel); font-family: var(--font-ui); font-size: 14px; }
-.divider { cursor: col-resize; background: var(--line); touch-action: none; }
-.divider:hover { background: var(--muted); }
+main { flex: 1; min-height: 0; }
+.story-pane { padding: var(--space-4) var(--space-5); }
 
 .story { outline: none; min-height: 240px; font-family: var(--font-prose); font-size: var(--text-prose); line-height: 1.65; }
 .story:focus-visible { outline: none; }
@@ -51,10 +48,10 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 
 @media (max-width: 760px) {
   .tabs { display: flex; }
-  main { display: block; }
-  .divider { display: none; }
-  main[data-tab='story'] .notes-pane, main[data-tab='notes'] .story-pane { display: none; }
-  .story-pane, .notes-pane { height: 100%; }
+  main { display: block; overflow: auto; }
+  main[data-tab='story'] .notes-pane, main[data-tab='notes'] .phone-story { display: none; }
+  .phone-story, .phone-story .panel-body { height: 100%; }
+  .notes-pane { height: 100%; background: var(--surface-sunken); padding: var(--space-3); font-size: var(--text-m); }
 }
 
 /* Notes pane tabs, Ledger and Roster */
@@ -132,7 +129,8 @@ a { color: inherit; }
 .story p[data-focus='true'] { outline: 2px dashed var(--fg); outline-offset: 2px; }
 .spotlight { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); font: 14px var(--font-ui); }
 .spotlight[data-mine='true'] { background: var(--ok-bg); color: var(--ok-fg); }
-.spotlight .row { margin: 0; }
+.spotlight .row { margin: 0; flex-wrap: nowrap; }
+.spotlight .row select { flex: 0 1 auto; width: auto; }
 
 /* Phone: tap targets, no sideways scroll, forms that fit 360px */
 @media (max-width: 760px) {
@@ -151,3 +149,49 @@ a { color: inherit; }
   .note-tabs button { flex: 1 1 auto; }
   .linklike { min-height: var(--tap); display: inline-flex; align-items: center; }
 }
+
+
+/* The dock: splits, tab groups, dividers, drop targets */
+.dock-main { display: block; overflow: hidden; }
+.dock { height: 100%; position: relative; }
+.dock-split { display: flex; height: 100%; min-width: 0; min-height: 0; }
+.dock-split[data-dir='col'] { flex-direction: column; }
+.dock-cell { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.dock-cell > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
+.dock-splitter { flex: 0 0 6px; background: var(--border); touch-action: none; position: relative; }
+.dock-splitter[data-dir='row'] { cursor: col-resize; }
+.dock-splitter[data-dir='col'] { cursor: row-resize; }
+.dock-splitter:hover, .dock-splitter:active { background: var(--border-strong); }
+.dock-splitter::after { content: ''; position: absolute; inset: 0 -4px; }
+.dock-splitter[data-dir='col']::after { inset: -4px 0; }
+.dock-group { display: flex; flex-direction: column; position: relative; background: var(--surface-sunken); }
+.dock-tabs { display: flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2); background: var(--surface); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.dock-tablist { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; gap: 2px; }
+.dock-tab { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: var(--space-2) var(--space-3); cursor: grab; white-space: nowrap; color: var(--text-muted); }
+.dock-tab:hover:not(:disabled) { background: var(--surface-sunken); color: var(--text); }
+.dock-tab[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; background: transparent; }
+.dock[data-dragging='true'] { cursor: grabbing; user-select: none; }
+.dock-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dock-slot, .panel-body { height: 100%; }
+.panel-body { overflow: auto; }
+.panel-body[data-panel]:not([data-panel='story']) { background: var(--surface-sunken); padding: var(--space-3) var(--space-4); font-size: var(--text-m); }
+.panel-body[data-panel='story'] { background: var(--surface); }
+.dock-drop { position: absolute; pointer-events: none; background: color-mix(in srgb, var(--focus) 22%, transparent); border: 2px solid var(--focus); border-radius: var(--radius); z-index: 5; inset: 0; }
+.dock-drop[data-zone='left'] { right: 50%; }
+.dock-drop[data-zone='right'] { left: 50%; }
+.dock-drop[data-zone='top'] { bottom: 50%; }
+.dock-drop[data-zone='bottom'] { top: 50%; }
+.dock-ghost { position: fixed; z-index: 50; pointer-events: none; background: var(--accent); color: var(--text-on-accent); padding: var(--space-1) var(--space-3); border-radius: var(--radius); box-shadow: var(--shadow-2); font: 600 var(--text-s) var(--font-ui); }
+
+/* Menus (the layout menu and each group's move menu) */
+.menu { position: relative; display: inline-block; }
+.menu-button { min-width: 32px; }
+.menu-list { position: absolute; z-index: 40; top: calc(100% + 4px); min-width: 240px; max-width: 80vw; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: var(--space-1); display: grid; }
+.menu[data-align='right'] .menu-list { right: 0; }
+.menu-list button { border: none; background: transparent; text-align: left; border-radius: var(--radius-s); width: 100%; display: flex; gap: var(--space-2); }
+.menu-list button:hover:not([aria-disabled='true']), .menu-list button:focus-visible { background: var(--surface-sunken); }
+.menu-list button[aria-disabled='true'] { opacity: .5; cursor: not-allowed; }
+.menu-list hr { border: none; border-top: 1px solid var(--border); margin: var(--space-1) 0; width: 100%; }
+.menu-heading { padding: var(--space-1) var(--space-3); font: 600 var(--text-xs) var(--font-ui); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.menu-check { width: 1em; display: inline-block; }
+@media (max-width: 760px) { .menu-text { display: none; } }

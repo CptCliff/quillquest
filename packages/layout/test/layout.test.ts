@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PANELS, allowedPanels, defaultLayout, findGroup, hidePanel, movePanel, normalize, panelsIn, phoneOrder, presets, resizeSplit, sanitize, setActive, showPanel,
+  dockToEdge, PANELS, allowedPanels, defaultLayout, findGroup, hidePanel, movePanel, normalize, panelsIn, phoneOrder, presets, resizeSplit, sanitize, setActive, showPanel,
   validateLayout, type Group, type Layout, type Node, type PanelId, type Split,
 } from '../src';
 
@@ -70,6 +70,29 @@ describe('moving a panel', () => {
     expect(l.hidden).not.toContain('info');
     expect(panelsIn(l)).toContain('info');
     expect(movePanel(base, 'ledger', 'nope', 'center')).toEqual(base);
+  });
+});
+
+describe('docking to an edge of the whole workspace', () => {
+  it('puts a panel along the left, right, top or bottom of everything, taking about a third of the room', () => {
+    const base = defaultLayout('player');
+    const right = dockToEdge(base, 'roster', 'right');
+    expect(groups(right.root).map((g) => g.tabs[0])).toEqual(['story', 'ledger', 'roster']); // joins the existing row
+    expect(total(right.root as Split)).toBeCloseTo(100);
+    expect((right.root as Split).sizes[2]).toBeCloseTo(30);
+    const left = dockToEdge(base, 'ledger', 'left');
+    expect(groups(left.root).map((g) => g.tabs[0])).toEqual(['ledger', 'story', 'create']);
+    const bottom = dockToEdge(base, 'codex', 'bottom');
+    expect(bottom.root).toMatchObject({ kind: 'split', dir: 'col' });
+    expect(((bottom.root as Split).children[1] as Group).tabs).toEqual(['codex']);
+    const top = dockToEdge(base, 'codex', 'top');
+    expect(((top.root as Split).children[0] as Group).tabs).toEqual(['codex']);
+    for (const l of [right, left, bottom, top]) expect(all(l)).toEqual(all(base));
+  });
+  it('a hidden panel can be docked, and a lone Story with nothing else is left alone', () => {
+    const base = defaultLayout('player');
+    expect(panelsIn(dockToEdge(base, 'info', 'bottom'))).toContain('info');
+    expect(dockToEdge(presets.focus('player'), 'story', 'left')).toEqual(presets.focus('player'));
   });
 });
 
@@ -205,11 +228,12 @@ describe('no operation ever loses or duplicates a panel', () => {
       for (let i = 0; i < 1500; i++) {
         const panel = want[rnd(want.length)] as PanelId;
         const gs = groups(l.root);
-        const op = rnd(5);
+        const op = rnd(6);
         if (op === 0) l = movePanel(l, panel, gs[rnd(gs.length)]!.id, zones[rnd(5)]!);
         else if (op === 1) { const ss = splits(l.root); if (ss.length) { const s = ss[rnd(ss.length)]!; l = resizeSplit(l, s.id, rnd(s.children.length), rnd(41) - 20); } }
         else if (op === 2) l = hidePanel(l, panel);
         else if (op === 3) l = showPanel(l, panel);
+        else if (op === 5) l = dockToEdge(l, panel, (['left', 'right', 'top', 'bottom'] as const)[rnd(4)]!);
         else l = setActive(l, panel);
         expect(all(l), `step ${i}`).toEqual(want);
         expect(panelsIn(l)).toContain('story');
