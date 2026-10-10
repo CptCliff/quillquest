@@ -13,14 +13,14 @@ import { SuggestionsPanel } from './SuggestionsPanel';
 import type { Me } from './StoryEditor';
 import { TablePanel } from './TablePanel';
 
-export type NotesTab = 'ledger' | 'create' | 'codex' | 'roster' | 'director';
+export type NotesTab = 'ledger' | 'create' | 'zero' | 'codex' | 'roster' | 'director';
 
 /** Session-zero state from the server-written maps. */
 export interface ZeroState { creation: Record<string, CreationState>; canon: Record<string, CanonEntry>; phase: string; crossings: CrossingProposal[]; overrides: CheckOverride[]; npcs: Record<string, PublicNpc>; convictionLog: Record<string, ConvictionLogEntry>; battles: Record<string, PublicBattle> }
 
 /** What each tab says: an attention dot on the Ledger when a card needs you, and on Creation while your character is being made. */
-export function panelLabels(me: Me, attention: boolean, creating: boolean): Record<PanelId, string> {
-  return { story: 'Story', ledger: attention ? 'Ledger •' : 'Ledger', create: creating ? 'Creation •' : 'Creation', codex: 'Codex', roster: 'Roster', director: 'Director', info: 'Card' };
+export function panelLabels(me: Me, attention: boolean, creating: boolean, zeroReady = false): Record<PanelId, string> {
+  return { story: 'Story', ledger: attention ? 'Ledger •' : 'Ledger', create: creating ? 'Creation •' : 'Creation', zero: zeroReady ? 'Session zero •' : 'Session zero', codex: 'Codex', roster: 'Roster', director: 'Director', info: 'Card' };
 }
 
 /**
@@ -54,10 +54,12 @@ export function NotesPanel({ panel: tab, cards, characters, me, game, accounts, 
           <ul data-testid="codex-conviction">{Object.values(zero.convictionLog).map((e) => <li key={e.id} data-testid="codex-conviction-entry">{characters[e.characterId]?.name ?? e.characterId}: {e.note}</li>)}</ul>
         </section>
       )}
+      {tab === 'zero' && me.role === 'gm' && (
+        <SessionZero game={game} characters={characters} creation={zero.creation} canon={zero.canon} phase={zero.phase} overrides={zero.overrides} onNotice={onNotice} />
+      )}
       {tab === 'director' && me.role === 'gm' && (
         <>
           <Director game={game} characters={characters} cards={cards} convictionLog={zero.convictionLog} overrides={zero.overrides} me={me} campaign={campaign} editor={editor} onNotice={onNotice} />
-          <SessionZero game={game} characters={characters} creation={zero.creation} canon={zero.canon} phase={zero.phase} overrides={zero.overrides} onNotice={onNotice} />
           <TablePanel accounts={accounts} campaign={campaign} onNotice={onNotice} />
         </>
       )}

@@ -18,8 +18,11 @@ describe('the default layout', () => {
     expect(notes!.tabs).toEqual(['ledger', 'create', 'codex', 'roster']);
     expect((p.root as Split).sizes).toEqual([62, 38]);
     expect(allowedPanels('player')).not.toContain('director');
+    expect(allowedPanels('player')).not.toContain('zero');
+    expect(allowedPanels('gm')).toContain('zero');
+    expect(allowedPanels('gm')).not.toContain('create');
     expect(defaultLayout('gm').root).toMatchObject({ kind: 'split' });
-    expect(groups(defaultLayout('gm').root)[1]!.tabs).toEqual(['ledger', 'codex', 'roster', 'director']);
+    expect(groups(defaultLayout('gm').root)[1]!.tabs).toEqual(['ledger', 'zero', 'codex', 'roster', 'director']);
     expect(allowedPanels('gm')).not.toContain('create');
   });
   it('accounts for every allowed panel exactly once: shown, or hidden (the info card starts hidden)', () => {
@@ -212,7 +215,7 @@ describe('the phone', () => {
   it('shows the same panels as one ordered list after Story, so a person\'s arrangement is honoured', () => {
     expect(phoneOrder(defaultLayout('player'), 'player')).toEqual(['ledger', 'create', 'codex', 'roster']);
     const swapped = phoneOrder(presets.swap('gm'), 'gm');
-    expect(swapped).toEqual(['ledger', 'codex', 'roster', 'director']);
+    expect(swapped).toEqual(['ledger', 'zero', 'codex', 'roster', 'director']);
     expect(phoneOrder(presets.focus('player'), 'player')).toEqual([]);
   });
 });
@@ -245,6 +248,22 @@ describe('no operation ever loses or duplicates a panel', () => {
     }
   });
   it('lists every panel the app knows', () => {
-    expect([...PANELS].sort()).toEqual(['codex', 'create', 'director', 'info', 'ledger', 'roster', 'story']);
+    expect([...PANELS].sort()).toEqual(['codex', 'create', 'director', 'info', 'ledger', 'roster', 'story', 'zero']);
+  });
+});
+
+describe('the GM\'s Session zero panel', () => {
+  it('a saved layout from before it existed gains it as a hidden panel, and the GM can show it', () => {
+    const old = JSON.parse(JSON.stringify(defaultLayout('gm')));
+    old.root.children[1].tabs = ['ledger', 'codex', 'roster', 'director'];
+    old.root.children[1].active = 'ledger';
+    old.hidden = [];
+    const fixed = sanitize(old, 'gm');
+    expect(fixed.hidden).toContain('zero');
+    expect(panelsIn(showPanel(fixed, 'zero'))).toContain('zero');
+  });
+  it('is refused for a player, on read and on write', () => {
+    expect(validateLayout(defaultLayout('gm'), 'player').ok).toBe(false);
+    expect(panelsIn(sanitize(defaultLayout('gm'), 'player'))).not.toContain('zero');
   });
 });

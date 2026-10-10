@@ -157,6 +157,7 @@ test('the info card is a panel that appears beside the Ledger and goes when clos
   const gm = await join(browser, t, 'gm1');
   await expect(gm.getByTestId('tab-director')).toBeVisible();
   await expect(page.getByTestId('tab-director')).toHaveCount(0);
+  await expect(page.getByTestId('tab-zero')).toHaveCount(0); // Session zero is the GM's too
   await gm.getByRole('button', { name: 'Layout' }).click();
   await expect(gm.getByRole('menuitemcheckbox', { name: 'Director' })).toBeVisible();
   await expect(gm.getByRole('menuitemcheckbox', { name: 'Creation' })).toHaveCount(0); // the GM writes no character

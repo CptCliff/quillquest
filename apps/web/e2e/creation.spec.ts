@@ -67,7 +67,7 @@ test('a GM and three players complete session zero, then play: grants, a swap, c
   await expect(pages.mira.locator('[data-character="mira-pc"] [data-testid="skills"]')).toContainText('none');
 
   // The GM writes the world fact; the Canon shows it to everyone.
-  await gm.getByTestId('tab-director').click();
+  await gm.getByTestId('tab-zero').click();
   await gm.getByTestId('world-fact-text').fill('The Border War ended in a treaty nobody trusts.');
   await gm.getByTestId('world-fact-go').click();
   await pages.tobin.getByTestId('tab-codex').click();
@@ -111,7 +111,7 @@ test('a GM and three players complete session zero, then play: grants, a swap, c
   await pages.wren.getByTestId('propose-skill-mira-pc-0-skill').fill('Persuade');
   await pages.wren.getByTestId('propose-skill-mira-pc-0-mode').selectOption('raise');
   await pages.wren.getByTestId('propose-skill-mira-pc-0-go').click();
-  await gm.getByTestId('tab-director').click();
+  await gm.getByTestId('tab-zero').click();
   const tied = gm.getByTestId('gm-grant').filter({ hasText: 'tied' });
   await expect(tied).toBeVisible();
   await tied.getByTestId('gm-choose').filter({ hasText: 'Choose this' }).nth(1).click();
@@ -186,10 +186,11 @@ test('a GM and three players complete session zero, then play: grants, a swap, c
   }
 
   // Begin play, from the GM only once all three are ready.
-  await gm.getByTestId('tab-director').click();
+  await gm.getByTestId('tab-zero').click();
   await expect(gm.getByTestId('begin-play')).toBeEnabled();
   await gm.getByTestId('begin-play').click();
   await expect(gm.getByTestId('phase')).toHaveText('play has begun');
+  await expect(gm.getByTestId('tab-zero')).not.toContainText('•');
 
   // And a character made this way plays: Mira opens a card with the Skill she was granted and rolls it.
   const mira = pages.mira;
@@ -214,7 +215,10 @@ test('a player who joins after play has begun creates their character mid-campai
   const t = await createTable(['ilse'], 'The Border War', false); // stays in session zero until the GM begins play
   const gm = await join(browser, t, 'gm1');
   await join(browser, t, 'ilse');
-  await gm.getByTestId('tab-director').click();
+  await expect(gm.getByTestId('tab-zero')).toContainText('Session zero •'); // everyone is ready: play can begin
+  await expect(gm.getByTestId('session-zero')).toBeVisible(); // and it is the GM's first tab
+  await expect(gm.getByTestId('tab-ledger')).toBeVisible();
+  await gm.getByTestId('tab-zero').click();
   await expect(gm.getByTestId('begin-play')).toBeEnabled(); // Ilse's sheet is ready-made
   await gm.getByTestId('begin-play').click();
   await expect(gm.getByTestId('phase')).toHaveText('play has begun');
@@ -232,7 +236,7 @@ test('a player who joins after play has begun creates their character mid-campai
   const roll = await api('wren', 'POST', `/api/campaigns/${t}/cards/${card.json.card.id}/roll`);
   expect([roll.status, roll.json.error.code]).toEqual([409, 'NOT_READY']);
   // The GM can let her through, with the reason on the record.
-  await gm.getByTestId('tab-director').click();
+  await gm.getByTestId('tab-zero').click();
   await gm.getByTestId('override-wren-pc-reason').fill('Joining mid-story; we will fill her sheet in as we play');
   await gm.getByTestId('override-wren-pc-go').click();
   await expect(gm.getByTestId('override-log')).toContainText('Joining mid-story');

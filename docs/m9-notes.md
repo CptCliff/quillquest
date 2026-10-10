@@ -31,3 +31,7 @@ Why: the first four-agent playtest never got a player through creation. Every Li
 - Roll cards cannot be opened until the GM begins play (`SESSION_ZERO`, 409); the Ledger says why. Tests that need a table in play seed it (`MemoryGameStore({ phase: 'playing' })`, e2e `createTable` begins play for the preset users).
 - `apps/web/lib/glossary.ts` is the one list of words (wording follows Rules v4, no dice or numbers; `glossary.test.ts` checks). `Term` is a tappable word in headings and help text (never inside a form label); `Glossary` is the "Words" dialog in the table header, with a filter, Escape to close and focus returned.
 - Terms are used in the Creation headings, the draft card's help line, odds, Concede and the Spotlight bar; the Conviction pips now read "n of 3".
+
+## The GM's Session zero tab
+- Session zero (world fact, who is ready and why not, tie-breaks, the logged override, Begin play) is now its own panel `zero` (GM only; `packages/layout`), second in the GM's notes group instead of the bottom of the Director tab. A GM who opens a table still in session zero lands on it, once, unless they have already clicked or typed or an email link named a tab. The tab gets a dot when every character is ready and play can begin; the Director keeps the Claude assistant, NPCs, Conviction and the invites.
+- A saved layout from before the panel gains it as a hidden panel (the Layout menu shows it); players never get it, on read or write.

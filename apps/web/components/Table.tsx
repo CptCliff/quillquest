@@ -21,7 +21,7 @@ import { StoryEditor, type Me } from './StoryEditor';
 import { Glossary } from './Glossary';
 import { ThemeToggle } from './ThemeToggle';
 
-const NOTES_PANELS: PanelId[] = ['ledger', 'create', 'codex', 'roster', 'director'];
+const NOTES_PANELS: PanelId[] = ['ledger', 'create', 'zero', 'codex', 'roster', 'director'];
 
 /**
  * The table (design plan 5). Story and the notes panels (Ledger, Creation, Codex, Roster, Director, and the open info card) are panels in a
@@ -59,7 +59,10 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
   });
   const attention = !me.left && (cards.some((c) => needsAttention(c, { id: me.id, role: me.role })) || battleAttention);
   const creating = me.role !== 'gm' && zero.creation[mine?.id ?? '']?.status === 'creating';
-  const labels = useMemo(() => panelLabels(me, attention, creating), [me, attention, creating]);
+  // The GM's Session zero tab gets a dot when every character is ready and play can begin.
+  const players = Object.values(characters).filter((c) => c.ownerId && !c.left);
+  const zeroReady = me.role === 'gm' && zero.phase !== 'playing' && players.length > 0 && players.every((c) => zero.creation[c.id]?.status === 'ready');
+  const labels = useMemo(() => panelLabels(me, attention, creating, zeroReady), [me, attention, creating, zeroReady]);
 
   const [editor, setEditor] = useState<Editor | null>(null);
   const [openCard, setOpenCard] = useState<OpenCard | null>(null);
@@ -87,6 +90,23 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
     if (phone) return;
     update((l) => (openCard ? showPanel(l, 'info') : hidePanel(l, 'info')), { save: false });
   }, [openCard, phone, update]);
+
+  // A GM who opens a table still in session zero lands on that tab (once, unless an email link asked for another).
+  const openedZero = useRef(false);
+  const touched = useRef(false); // the person has already clicked or typed: never yank them to another tab
+  useEffect(() => {
+    const mark = () => { touched.current = true; };
+    window.addEventListener('pointerdown', mark, true); window.addEventListener('keydown', mark, true);
+    return () => { window.removeEventListener('pointerdown', mark, true); window.removeEventListener('keydown', mark, true); };
+  }, []);
+  useEffect(() => {
+    if (openedZero.current || me.role !== 'gm' || campaignMap.phase !== 'sessionZero') return;
+    if (touched.current) { openedZero.current = true; return; }
+    openedZero.current = true;
+    if (new URLSearchParams(window.location.search).get('tab')) return;
+    update((l) => (l.hidden.includes('zero') ? showPanel(l, 'zero') : setActive(l, 'zero')), { save: false });
+    setPhoneNote('zero');
+  }, [campaignMap.phase, me.role, update]);
 
   // Deep links from email: ?tab=, ?card=, ?battle=, ?para=. Open the right panel and highlight the thing, once it has loaded.
   useEffect(() => {

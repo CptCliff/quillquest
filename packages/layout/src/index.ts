@@ -1,7 +1,7 @@
 // The table's workspace as pure data (interface design pass). A layout is a tree of splits and tabbed groups of panels, plus the panels
 // currently hidden. Every operation returns a new layout and never loses or duplicates a panel; `validateLayout` is what the server accepts.
 
-export const PANELS = ['story', 'ledger', 'create', 'codex', 'roster', 'director', 'info'] as const;
+export const PANELS = ['story', 'ledger', 'create', 'zero', 'codex', 'roster', 'director', 'info'] as const;
 export type PanelId = (typeof PANELS)[number];
 export type Role = 'player' | 'gm';
 export type Zone = 'center' | 'left' | 'right' | 'top' | 'bottom';
@@ -18,9 +18,9 @@ const MAX_DEPTH = 8;
 const MAX_GROUPS = 12;
 const MAX_BYTES = 8000;
 
-/** The Director is the GM's; Creation is the player's. Everything else is shared. */
-export const allowedPanels = (role: Role): PanelId[] => (role === 'gm' ? ['story', 'ledger', 'codex', 'roster', 'director', 'info'] : ['story', 'ledger', 'create', 'codex', 'roster', 'info']);
-const NOTES: Record<Role, PanelId[]> = { player: ['ledger', 'create', 'codex', 'roster'], gm: ['ledger', 'codex', 'roster', 'director'] };
+/** The Director and Session zero are the GM's; Creation is the player's. Everything else is shared. */
+export const allowedPanels = (role: Role): PanelId[] => (role === 'gm' ? ['story', 'zero', 'ledger', 'codex', 'roster', 'director', 'info'] : ['story', 'ledger', 'create', 'codex', 'roster', 'info']);
+const NOTES: Record<Role, PanelId[]> = { player: ['ledger', 'create', 'codex', 'roster'], gm: ['ledger', 'zero', 'codex', 'roster', 'director'] };
 
 // ---------- reading ----------
 const walk = (n: Node, f: (n: Node) => void) => { f(n); if (n.kind === 'split') n.children.forEach((c) => walk(c, f)); };
