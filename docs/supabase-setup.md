@@ -68,3 +68,7 @@ If sign-in loops or the table says "Not your table" for a member, check the serv
 - One sync process per deployment for now: the per-campaign lock that orders game actions is in memory.
 - A WebSocket authenticates once when it connects. A Supabase token lasts about an hour, but an open table keeps working past
   that; the next reconnect uses a fresh token. Leaving a campaign closes your sockets at once.
+
+## Check the configuration first
+`pnpm --filter @quillquest/sync check:services --only=sign-in` checks the project URL, the published signing keys and the dev switches before you
+try a real sign-in. See `docs/go-live.md`.

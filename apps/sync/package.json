@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p .",
-    "dev": "tsx src/server.ts"
+    "dev": "tsx src/server.ts",
+    "check:services": "tsx src/doctor.ts"
   },
   "dependencies": {
     "@hocuspocus/server": "4.7.0",
