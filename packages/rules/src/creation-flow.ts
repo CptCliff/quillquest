@@ -419,6 +419,15 @@ export function addWorldFact(w: W, actor: CreationActor, a: { chapter: number; t
 }
 
 // ---------- crossings ----------
+/** Two crossings are the same when they join the same two chapters of the same two characters, whichever of them proposed it. */
+type Ends = Pick<CrossingProposal, 'from' | 'to' | 'fromChapter' | 'toChapter'>;
+const endKey = (c: string, ch: number) => `${c}:${ch}`;
+const sameEnds = (a: Ends, b: Ends): boolean => {
+  const x = [endKey(a.from, a.fromChapter), endKey(a.to, a.toChapter)].sort().join('|');
+  const y = [endKey(b.from, b.fromChapter), endKey(b.to, b.toChapter)].sort().join('|');
+  return x === y;
+};
+
 export function proposeCrossing(w: W, actor: CreationActor, a: { toCharacterId: string; fromChapter: number; toChapter: number; paragraphId: string; touchesBelief: boolean; fromConnection: string; toConnection: string; thread?: string }): W {
   const me = charOf(w, actor);
   if (a.toCharacterId === me.id) no('BAD_INPUT', 'Cross paths with someone else');
@@ -427,6 +436,8 @@ export function proposeCrossing(w: W, actor: CreationActor, a: { toCharacterId: 
   if (!ms.chapters[a.fromChapter] || !os.chapters[a.toChapter]) no('NO_SUCH_CHAPTER', 'No such chapter');
   if (me.crossings.length >= 2 || other.crossings.length >= 2) no('CROSSINGS_FULL', 'Two crossings each is the limit');
   claimParagraph(w, a.paragraphId);
+  const ends = { from: me.id, to: other.id, fromChapter: a.fromChapter, toChapter: a.toChapter };
+  if (w.proposals.some((p) => p.status !== 'declined' && sameEnds(p, ends))) no('DUPLICATE_CROSSING', `${me.name} and ${other.name} already have a crossing between those two chapters (a declined one can be proposed again)`);
   const fromConnection = text(a.fromConnection, 'The Connection'); const toConnection = text(a.toConnection, 'The Connection');
   const [w2, id] = nextId(w, 'x-');
   const thread = a.thread?.trim();
@@ -453,7 +464,9 @@ export function confirmCrossing(w: W, actor: CreationActor, a: { proposalId: str
   const shared = (id: string) => (p.thread ? [{ id, text: p.thread, source: { type: 'crossing' as const } }] : []);
   const nf: Character = { ...from, connections: [...from.connections, { id: ids[0]!, text: p.fromConnection, withCharacterId: to.id }], threads: [...from.threads, ...shared(ids[2]!)], crossings: [...from.crossings, { withCharacterId: to.id, myChapter: p.fromChapter, theirChapter: p.toChapter, touchesBelief: p.touchesBelief }] };
   const nt: Character = { ...to, connections: [...to.connections, { id: ids[1]!, text: p.toConnection, withCharacterId: from.id }], threads: [...to.threads, ...shared(ids[3]!)], crossings: [...to.crossings, { withCharacterId: from.id, myChapter: p.toChapter, theirChapter: p.fromChapter, touchesBelief: p.touchesBelief }] };
-  return setStatus(put(put(w2, nf), nt), p.id, 'confirmed');
+  // A mirror image that was already waiting is the same crossing: it is closed, not left pending.
+  const done = setStatus(put(put(w2, nf), nt), p.id, 'confirmed');
+  return { ...done, proposals: done.proposals.map((x) => (x.id !== p.id && x.status === 'pending' && sameEnds(x, p) ? { ...x, status: 'declined' as const } : x)) };
 }
 
 // ---------- steps 5-8: capital, beliefs, instincts, hook ----------

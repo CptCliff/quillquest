@@ -336,6 +336,25 @@ describe('crossing paths (step 4)', () => {
     fails(() => propose(ready(), ilse, { toCharacterId: 'nobody' }), 'NO_CHARACTER');
     fails(() => propose(ready(), ilse, { paragraphId: 'i1' }), 'PARAGRAPH_USED');
   });
+  it('refuses a second crossing between the same two chapters, in either direction, while the first is open or done', () => {
+    const w = propose(ready(), ilse); // Ilse's chapter 1 with Sella's chapter 2
+    fails(() => propose(w, ilse, { paragraphId: 'x2' }), 'DUPLICATE_CROSSING');
+    fails(() => propose(w, sella, { toCharacterId: 'ilse-pc', fromChapter: 1, toChapter: 0, paragraphId: 'x3', fromConnection: 'a', toConnection: 'b' }), 'DUPLICATE_CROSSING'); // the mirror image
+    expect(() => propose(w, ilse, { paragraphId: 'x4', fromChapter: 1, toChapter: 1 })).not.toThrow(); // other chapters are fine
+    const done = confirmCrossing(w, sella, { proposalId: w.proposals[0]!.id });
+    fails(() => propose(done, sella, { toCharacterId: 'ilse-pc', fromChapter: 1, toChapter: 0, paragraphId: 'x5', fromConnection: 'a', toConnection: 'b' }), 'DUPLICATE_CROSSING');
+    const declined = declineCrossing(w, sella, { proposalId: w.proposals[0]!.id });
+    expect(() => propose(declined, sella, { toCharacterId: 'ilse-pc', fromChapter: 1, toChapter: 0, paragraphId: 'x6', fromConnection: 'a', toConnection: 'b' })).not.toThrow(); // a declined one can be retried
+  });
+  it('confirming one closes any mirror image that was already pending', () => {
+    // Both proposed before either was answered (possible in a record that predates the duplicate check).
+    let w = propose(ready(), ilse);
+    const mirror = { id: 'x-legacy', from: 'sella-pc', to: 'ilse-pc', fromChapter: 1, toChapter: 0, paragraphId: 'x9', touchesBelief: false, fromConnection: 'a', toConnection: 'b', status: 'pending' as const };
+    w = { ...w, proposals: [...w.proposals, mirror] };
+    w = confirmCrossing(w, sella, { proposalId: w.proposals[0]!.id });
+    expect(w.proposals.map((p) => p.status)).toEqual(['confirmed', 'declined']);
+    expect(sheet(w, 'ilse').crossings).toHaveLength(1);
+  });
   it('is two crossings each, so nobody is left out', () => {
     let w = ready();
     w = propose(w, ilse, { paragraphId: 'x1' }); w = confirmCrossing(w, sella, { proposalId: w.proposals.at(-1)!.id });

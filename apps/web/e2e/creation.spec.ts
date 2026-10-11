@@ -216,7 +216,6 @@ test('a player who joins after play has begun creates their character mid-campai
   const gm = await join(browser, t, 'gm1');
   await join(browser, t, 'ilse');
   await expect(gm.getByTestId('tab-zero')).toContainText('Session zero •'); // everyone is ready: play can begin
-  await expect(gm.getByTestId('session-zero')).toBeVisible(); // and it is the GM's first tab
   await expect(gm.getByTestId('tab-ledger')).toBeVisible();
   await gm.getByTestId('tab-zero').click();
   await expect(gm.getByTestId('begin-play')).toBeEnabled(); // Ilse's sheet is ready-made
@@ -290,4 +289,12 @@ test('a solo draft is private, is marked up, and is brought to the table where i
   await tobin.getByTestId('propose-skill-mira-pc-0-skill').fill('Climb');
   await tobin.getByTestId('propose-skill-mira-pc-0-go').click();
   await expect(draft.locator('[data-index="0"] [data-testid="chapter-skill"]')).toContainText('Climb (Trained)');
+});
+
+test('a GM who opens a table in session zero, and touches nothing, lands on the Session zero tab', async ({ browser }) => {
+  const t = await createTable(['mira'], 'The Border War', false);
+  await api('mira', 'GET', `/api/campaigns/${t}/me`); // the table's first visit publishes the session-zero state
+  const gm = await join(browser, t, 'gm1');
+  await expect(gm.getByTestId('session-zero')).toBeVisible();
+  await expect(gm.getByTestId('tab-zero')).toHaveAttribute('aria-selected', 'true');
 });

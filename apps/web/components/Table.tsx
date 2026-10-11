@@ -72,7 +72,7 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
   const [phoneNote, setPhoneNote] = useState<PanelId>('ledger');
 
   const phone = useMediaQuery('(max-width: 760px)');
-  const { layout, update, reset } = useLayout(game, me.role, phone ? 'phone' : 'wide');
+  const { layout, update, reset, loaded } = useLayout(game, me.role, phone ? 'phone' : 'wide');
   const phoneList = useMemo(() => phoneOrder(layout, me.role), [layout, me.role]);
   const phoneActive = phoneList.includes(phoneNote) ? phoneNote : (phoneList[0] ?? 'ledger');
 
@@ -100,13 +100,13 @@ export function Table({ doc, provider, me, title, campaign, status, peers, game,
     return () => { window.removeEventListener('pointerdown', mark, true); window.removeEventListener('keydown', mark, true); };
   }, []);
   useEffect(() => {
-    if (openedZero.current || me.role !== 'gm' || campaignMap.phase !== 'sessionZero') return;
+    if (openedZero.current || !loaded || me.role !== 'gm' || campaignMap.phase !== 'sessionZero') return; // after the saved layout has loaded, or it would replace this
     if (touched.current) { openedZero.current = true; return; }
     openedZero.current = true;
     if (new URLSearchParams(window.location.search).get('tab')) return;
     update((l) => (l.hidden.includes('zero') ? showPanel(l, 'zero') : setActive(l, 'zero')), { save: false });
     setPhoneNote('zero');
-  }, [campaignMap.phase, me.role, update]);
+  }, [campaignMap.phase, me.role, update, loaded]);
 
   // Deep links from email: ?tab=, ?card=, ?battle=, ?para=. Open the right panel and highlight the thing, once it has loaded.
   useEffect(() => {

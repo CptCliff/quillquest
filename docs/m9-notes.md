@@ -35,3 +35,8 @@ Why: the first four-agent playtest never got a player through creation. Every Li
 ## The GM's Session zero tab
 - Session zero (world fact, who is ready and why not, tie-breaks, the logged override, Begin play) is now its own panel `zero` (GM only; `packages/layout`), second in the GM's notes group instead of the bottom of the Director tab. A GM who opens a table still in session zero lands on it, once, unless they have already clicked or typed or an email link named a tab. The tab gets a dot when every character is ready and play can begin; the Director keeps the Claude assistant, NPCs, Conviction and the invites.
 - A saved layout from before the panel gains it as a hidden panel (the Layout menu shows it); players never get it, on read or write.
+
+## Matcher by role, and duplicate crossings
+- `scoreTemplate` reads the role, not just the words: a keyword counts 1 when mentioned, 2 when it names what the writer was ("I was a healer", "served as the gate guard"; "was" counts only after "I"), and a quarter when it is only the object of a verb ("caught a smuggler's cart") or is turned into something else by the next word ("forged pass" is not smithing). Multi-word keywords ("black market") now match as phrases. Close is 2 or more, partial is 1 or more. Still deterministic and keyword-based: an unusual phrasing can still miss, and "own words" remains the way out.
+- A crossing between the same two chapters of the same two characters is refused while another is open or done, whichever of them proposed it (`DUPLICATE_CROSSING`); a declined one can be proposed again. Confirming one closes a mirror image that was already pending.
+- The GM's auto-landing on Session zero waits for the saved layout to load (it was being replaced by it) and has its own test.

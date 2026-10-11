@@ -32,4 +32,30 @@ describe('chapter library', () => {
     expect(matchTemplates('Zzz qqq xxx', '').map((m) => m.template.id)).toEqual(none.map((m) => m.template.id));
     expect(templateById('smith')?.name).toMatch(/Smith/);
   });
+
+  describe('reads the role, not just the words', () => {
+    const top = (prose: string, summary = '') => matchTemplates(prose, summary)[0]!;
+    it('a smuggler who is only the object of a verb does not make the writer a smuggler', () => {
+      expect(top('I was the guard on the gate who caught a smuggler\'s cart at dawn.').template.id).toBe('gate-warden');
+      expect(matchTemplates('I caught a smuggler\'s cart.').find((m) => m.template.id === 'smuggler')!.score).toBeLessThan(1);
+    });
+    it('a role named after "I was a", "as a" or "served" counts for more than a passing mention', () => {
+      const role = matchTemplates('I served as a healer in the plague wards.').find((m) => m.template.id === 'hospitaller')!;
+      const passing = matchTemplates('I passed a healer in the street.').find((m) => m.template.id === 'hospitaller')!;
+      expect(role.score).toBeGreaterThan(passing.score);
+      expect(role.tier).toBe('close');
+    });
+    it('"forged" documents are not smithing, and "forge" the workshop still is', () => {
+      const docs = matchTemplates('I used a forged pass to cross the river.');
+      expect(docs.find((m) => m.template.id === 'smith')!.score).toBeLessThan(1);
+      expect(docs[0]!.template.id).not.toBe('smith');
+      expect(top('I worked the forge and learned to hammer iron as an apprentice.').template.id).toBe('smith');
+    });
+    it('a field medic is a healer, not a farmhand', () => {
+      expect(top('I was a field medic, stitching soldiers back together between battles.').template.id).toBe('hospitaller');
+    });
+    it('multi-word keywords match as phrases', () => {
+      expect(matchTemplates('I ran a black market stall behind the docks.').find((m) => m.template.id === 'smuggler')!.score).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

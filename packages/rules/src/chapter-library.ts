@@ -43,7 +43,7 @@ const SEEDS: Seed[] = [
     'sailor|ship|boat|sea|river|deck|crew|harbour|harbor|dock|captain|sail|fish', 'Sailing|Knots and Rigging|Weather Sense|Swimming', 'Sure-Footed|Superstitious|Cheerful in a Storm|Strong Back', 'Fears Open Water|Cannot Sleep Ashore|Drinks to Forget',
     'A bosun who taught you everything|A shipmate lost overboard', 'A share in a small boat|A sailor\'s name in every port', 'The voyage that went wrong|A debt to the sea'],
   ['smuggler', 'Trade and travel', 'The Runner', 'You moved things that were not supposed to be moved.',
-    'smuggle|smuggler|contraband|runner|illegal|bribe|hide|secret|black market|hidden', 'Smuggling|Talking Past Inspectors|Hiding Goods|Forging Papers', 'Cool Liar|Light Fingered|Knows the Back Ways|Nerves of Iron', 'Looks Over Their Shoulder|Never Sleeps Twice in One Place|Owes the Wrong People',
+    'smuggle|smuggler|contraband|runner|illegal|bribe|hide|secret|black market|hidden|forged|forgery', 'Smuggling|Talking Past Inspectors|Hiding Goods|Forging Papers', 'Cool Liar|Light Fingered|Knows the Back Ways|Nerves of Iron', 'Looks Over Their Shoulder|Never Sleeps Twice in One Place|Owes the Wrong People',
     'A fence who still takes your calls|An inspector who looks the other way', 'A hidden cache|Several false names', 'A package you never delivered|The person who sold you out'],
 
   // ---- craft and learning
@@ -51,7 +51,7 @@ const SEEDS: Seed[] = [
     'smith|forge|apprentice|hammer|metal|anvil|craft|workshop|mason|carpenter|tool', 'Smithing|Repairing Anything|Judging Materials|Tireless Labour', 'Strong Hands|Patient|Takes Pride in Work|Practical', 'Burns Hot|Cannot Leave a Flaw|Distrusts Shortcuts',
     'A master who never praised you|A customer who became a friend', 'A set of good tools|A forge you can borrow', 'A piece you made that was used for harm|A master\'s unfinished work'],
   ['scribe', 'Craft and learning', 'The Scribe', 'You kept records, copied texts and learned what was not meant to be read.',
-    'scribe|clerk|book|library|record|letter|copy|ledger|archive|document|read|write', 'Reading Old Hands|Forging a Seal|Keeping Records|Research', 'Precise|Well Read|Quiet Observer|Discreet', 'Cannot Stop Reading|Hates a Blot|Knows Too Much',
+    'scribe|clerk|book|library|record|letter|copy|ledger|archive|document|forged|forgery|seal', 'Reading Old Hands|Forging a Seal|Keeping Records|Research', 'Precise|Well Read|Quiet Observer|Discreet', 'Cannot Stop Reading|Hates a Blot|Knows Too Much',
     'A librarian who shared forbidden shelves|A noble who paid you well', 'A small private library|Letters of introduction', 'A page you were not supposed to see|A record that was changed'],
   ['scholar', 'Craft and learning', 'The Student', 'You studied, argued and found out how little you knew.',
     'student|study|school|university|scholar|teacher|master|lecture|college|learn|academy', 'Lore|Persuasion|Languages|Natural Philosophy', 'Curious|Eloquent|Open-Minded|Stubborn about Facts', 'Condescending|Cannot Admit Doubt|Lost in Thought',
@@ -62,7 +62,7 @@ const SEEDS: Seed[] = [
 
   // ---- faith and healing
   ['hospitaller', 'Faith and healing', 'The Hospitaller', 'You tended the sick and the dying, and chose who to save when you could not save all.',
-    'heal|healer|doctor|nurse|hospital|medicine|sick|plague|herb|wound|cure|care', 'Healing|Herbalism|Calming the Frightened|Triage', 'Gentle Hands|Calm in a Crisis|Compassionate|Tireless', 'Cannot Refuse a Patient|Carries the Dead|Never Rests',
+    'heal|healer|doctor|nurse|hospital|medicine|medic|surgeon|stitch|stitching|sick|plague|herb|wound|wounded|cure|care', 'Healing|Herbalism|Calming the Frightened|Triage', 'Gentle Hands|Calm in a Crisis|Compassionate|Tireless', 'Cannot Refuse a Patient|Carries the Dead|Never Rests',
     'A patient who never forgot you|A physician who taught you', 'A satchel of remedies|A bed at the hospital', 'The patient you could not save|A cure you were forbidden to use'],
   ['acolyte', 'Faith and healing', 'The Acolyte', 'You served a faith, its rites, its poor and its politics.',
     'priest|temple|faith|god|prayer|monk|church|shrine|pilgrim|rite|chapel|sermon', 'Ritual|Counsel|Scripture|Charity', 'Devout|Serene|Honest to a Fault|Welcomes Strangers', 'Doubts Quietly|Cannot Forgive|Judges Too Fast',
@@ -108,23 +108,62 @@ const SEEDS: Seed[] = [
 export const CHAPTER_LIBRARY: readonly ChapterTemplate[] = SEEDS.map(make);
 export const templateById = (id: string): ChapterTemplate | undefined => CHAPTER_LIBRARY.find((t) => t.id === id);
 
-const tokens = (s: string): string[] => s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+const tokens = (s: string): string[] => s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length > 0);
+
+/** A word that names what the writer was ("I was a healer", "served as the gate guard"), as opposed to something they met or did to someone. */
+const ROLE_LEAD = new Set(['was', 'as', 'became', 'become', 'served', 'worked', 'joined', 'hired', 'trained', 'apprenticed', 'apprentice']);
+const ARTICLES = new Set(['a', 'an', 'the']);
+const OBJECT_LEAD = new Set(['caught', 'arrested', 'chased', 'hunted', 'fought', 'killed', 'robbed', 'tracked', 'stopped', 'met', 'bribed', 'captured', 'jailed', 'avoided', 'fled', 'escaped', 'betrayed', 'hated', 'feared', 'passed', 'saw', 'heard']);
+/** Words that turn a keyword into something else: a "forged pass" is a document, not a forge. */
+const NOT_NEAR: Record<string, string[]> = { smith: ['pass', 'papers', 'paper', 'seal', 'letter', 'letters', 'signature', 'document', 'documents', 'permit', 'writ', 'identity', 'coin', 'coins'] };
+
+/** Does a keyword (one word or a phrase) match here, and how many words does the match cover? Stems count: "guarded" matches "guard". */
+function matchAt(words: string[], i: number, k: string): number {
+  const parts = k.split(' ');
+  if (parts.length > 1) return parts.every((p, j) => words[i + j] === p) ? parts.length : 0;
+  const w = words[i]!;
+  return w === k || (k.length >= 4 && (w.startsWith(k) || (k.startsWith(w) && w.length >= 4))) ? 1 : 0;
+}
+
+/**
+ * How well the prose points at a template. Each distinct keyword counts once, at its best reading: 1 for being mentioned, 2 when it names
+ * the writer's role ("I was a healer"), a quarter when it is only the object of a verb ("caught a smuggler") or is turned into something
+ * else by the next word ("forged pass"). Deterministic; no AI.
+ */
+export function scoreTemplate(prose: string, t: ChapterTemplate): number {
+  const words = tokens(prose);
+  if (!words.length) return 0;
+  const notNear = NOT_NEAR[t.id] ?? [];
+  let total = 0;
+  for (const k of t.keywords) {
+    let best = 0;
+    for (let i = 0; i < words.length; i++) {
+      const span = matchAt(words, i, k);
+      if (!span) continue;
+      const before = (n: number) => words[i - n];
+      let weight = 1;
+      // "was" only names a role in the first person ("I was a healer"), not in "there was a boat"
+      const lead = (n: number) => { const w = before(n); return !!w && ROLE_LEAD.has(w) && (w !== 'was' || before(n + 1) === 'i'); };
+      const role = lead(1) || (!!before(1) && ARTICLES.has(before(1)!) && lead(2));
+      const object = (before(1) && OBJECT_LEAD.has(before(1)!)) || (before(2) && OBJECT_LEAD.has(before(2)!) && ARTICLES.has(before(1) ?? ''));
+      // "caught a smuggler's cart": the possessive leaves a stray "s" between the word and the verb
+      const possessive = before(1) === 's' && ((before(3) && OBJECT_LEAD.has(before(3)!)) || (before(2) && ARTICLES.has(before(2)!) && before(3) && OBJECT_LEAD.has(before(3)!)));
+      if (role) weight = 2; else if (object || possessive) weight = 0.25;
+      if (weight > 0.25 && notNear.includes(words[i + span] ?? '')) weight = 0.25;
+      best = Math.max(best, weight);
+    }
+    total += best;
+  }
+  return total;
+}
 
 export type MatchTier = 'close' | 'partial' | 'none';
 export interface TemplateMatch { template: ChapterTemplate; score: number; tier: MatchTier }
 
-/** Distinct keywords that appear in the prose, as a share of the template's keywords (keyword stems count: "guarded" matches "guard"). */
-export function scoreTemplate(prose: string, t: ChapterTemplate): number {
-  const words = tokens(prose);
-  if (!words.length) return 0;
-  const hit = t.keywords.filter((k) => words.some((w) => w === k || (k.length >= 4 && (w.startsWith(k) || k.startsWith(w) && w.length >= 4)))).length;
-  return hit;
-}
-
-/** Templates ranked by how many of their keywords the chapter mentions. Two or more is "close", one is "partial". Deterministic. */
+/** Templates ranked by score. Two or more is "close", one or more is "partial". Ties break by id, so it is deterministic. */
 export function matchTemplates(prose: string, summary = ''): TemplateMatch[] {
   const text = `${summary} ${prose}`;
   return CHAPTER_LIBRARY
-    .map((template) => { const score = scoreTemplate(text, template); return { template, score, tier: (score >= 2 ? 'close' : score === 1 ? 'partial' : 'none') as MatchTier }; })
+    .map((template) => { const score = scoreTemplate(text, template); return { template, score, tier: (score >= 2 ? 'close' : score >= 1 ? 'partial' : 'none') as MatchTier }; })
     .sort((a, b) => b.score - a.score || a.template.id.localeCompare(b.template.id));
 }
