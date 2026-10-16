@@ -6,7 +6,7 @@ const DEV_KEY = 'qq.dev.user';
 const read = (k: string) => { try { return sessionStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string | null) => { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch { /* private window */ } };
 
-export type SessionState = { status: 'loading' } | { status: 'out' } | { status: 'in'; userId: string; email?: string };
+export type SessionState = { status: 'loading' } | { status: 'out'; reason?: 'not-on-tailnet' } | { status: 'in'; userId: string; email?: string };
 
 export interface Session {
   state: SessionState;
@@ -32,6 +32,19 @@ export const useSession = (): Session => {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
   const devToken = useRef<{ token: string; at: number } | null>(null);
+  const tailnetToken = useRef<{ token: string; at: number } | null>(null);
+
+  /** Signs in through the Tailscale proxy (a self-hosted table on a private network). Returns null when this server does not offer it. */
+  const tailnetLogin = useCallback(async (): Promise<{ token: string; userId: string; email?: string } | 'refused' | null> => {
+    try {
+      const res = await fetch('/api/auth/tailnet', { method: 'POST' });
+      if (res.status === 404) return null;
+      if (!res.ok) return 'refused';
+      const body = await res.json();
+      tailnetToken.current = { token: body.token, at: Date.now() };
+      return { token: body.token, userId: body.userId, email: body.email };
+    } catch { return null; }
+  }, []);
 
   useEffect(() => {
     const sb = supabase();
@@ -53,8 +66,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setState(id ? { status: 'in', userId: id } : { status: 'out' });
       return;
     }
-    setState({ status: 'out' });
-  }, []);
+    // No Supabase and no dev sign-in: a self-hosted table may sign people in through its Tailscale proxy.
+    tailnetLogin().then((r) => {
+      if (r && r !== 'refused') setState({ status: 'in', userId: r.userId, email: r.email });
+      else setState(r === 'refused' ? { status: 'out', reason: 'not-on-tailnet' } : { status: 'out' });
+    });
+  }, [tailnetLogin]);
 
   const getToken = useCallback(async () => {
     const sb = supabase();
@@ -63,8 +80,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!data.session) throw new Error('not signed in');
       return data.session.access_token;
     }
+    if (!devAuthEnabled()) {
+      // Tailnet sign-in: a token lasts twelve hours; ask for a fresh one when it is half spent.
+      const cached = tailnetToken.current;
+      if (cached && Date.now() - cached.at < 6 * 3600_000) return cached.token;
+      const r = await tailnetLogin();
+      if (!r || r === 'refused') throw new Error('not signed in');
+      return r.token;
+    }
     const id = read(DEV_KEY);
-    if (!id || !devAuthEnabled()) throw new Error('not signed in');
+    if (!id) throw new Error('not signed in');
     const cached = devToken.current;
     if (cached && Date.now() - cached.at < 5 * 60_000) return cached.token;
     const res = await fetch(`/api/dev-token?user=${encodeURIComponent(id)}`);
@@ -72,7 +97,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const { token } = await res.json();
     devToken.current = { token, at: Date.now() };
     return token as string;
-  }, []);
+  }, [tailnetLogin]);
 
   const session = useMemo<Session>(() => ({
     state,

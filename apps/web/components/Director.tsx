@@ -1,4 +1,5 @@
 'use client';
+import { syncUrl } from '../lib/sync-url';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
@@ -14,7 +15,6 @@ import { StoryEditor, type Me } from './StoryEditor';
 type Notice = (message: string) => void;
 interface Item { id: string; kind: SuggestionKind; label: string; text: string; original: string }
 
-const SYNC_URL = process.env.NEXT_PUBLIC_SYNC_URL ?? 'ws://localhost:1234';
 
 /** A draft as editable text: prompts, Dangers, a line, or a face of the Burden oracle. */
 function draftText(draft: Draft, faces: string[]): string {
@@ -243,7 +243,7 @@ function GmNotes({ campaign, me, onNotice }: { campaign: string; me: Me; onNotic
   const [conn, setConn] = useState<{ doc: Y.Doc; provider: HocuspocusProvider } | null>(null);
   useEffect(() => {
     const doc = new Y.Doc();
-    const provider = new HocuspocusProvider({ url: SYNC_URL, name: `${campaign}~gm`, document: doc, token: () => session.getToken() });
+    const provider = new HocuspocusProvider({ url: syncUrl(), name: `${campaign}~gm`, document: doc, token: () => session.getToken() });
     setConn({ doc, provider });
     return () => { provider.destroy(); doc.destroy(); setConn(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

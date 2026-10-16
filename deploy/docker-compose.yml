@@ -1,0 +1,105 @@
+# Quillquest for you and a few friends, reachable only over your Tailscale network.
+# Start: ./setup.sh once, then `docker compose up -d --build`. Guide: docs/self-hosting.md.
+name: quillquest
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quillquest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./setup.sh first}
+      POSTGRES_DB: quillquest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quillquest -d quillquest"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  sync:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: sync
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "1234"
+      DATABASE_URL: postgres://quillquest:${POSTGRES_PASSWORD}@postgres:5432/quillquest
+      # Sign-in through Tailscale (people on your tailnet; QUILLQUEST_TAILNET_ALLOW narrows it to a guest list).
+      QUILLQUEST_AUTH_TAILNET: "1"
+      QUILLQUEST_SESSION_SECRET: ${QUILLQUEST_SESSION_SECRET:?run ./setup.sh first}
+      QUILLQUEST_PROXY_SECRET: ${QUILLQUEST_PROXY_SECRET:?run ./setup.sh first}
+      QUILLQUEST_TAILNET_ALLOW: ${QUILLQUEST_TAILNET_ALLOW:-}
+      # Optional: the address links in emails start from, e.g. https://quillquest.your-tailnet.ts.net
+      QUILLQUEST_PUBLIC_URL: ${QUILLQUEST_PUBLIC_URL:-}
+      # Optional: Supabase sign-in beside Tailscale (leave empty to use Tailscale only).
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      # Optional: the Claude assistant (docs/llm-providers.md) and email (docs/mail-providers.md).
+      QUILLQUEST_LLM: ${QUILLQUEST_LLM:-}
+      QUILLQUEST_LLM_MODEL: ${QUILLQUEST_LLM_MODEL:-}
+      QUILLQUEST_LLM_URL: ${QUILLQUEST_LLM_URL:-}
+      QUILLQUEST_LLM_KEY: ${QUILLQUEST_LLM_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      QUILLQUEST_MAIL: ${QUILLQUEST_MAIL:-}
+      QUILLQUEST_MAIL_FROM: ${QUILLQUEST_MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(1234,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [internal]
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    restart: unless-stopped
+    networks: [internal]
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [sync, web]
+    environment:
+      QUILLQUEST_PROXY_SECRET: ${QUILLQUEST_PROXY_SECRET}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    # No published ports: the only way in is through the tailscale service below.
+    networks: [internal]
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    restart: unless-stopped
+    hostname: ${TS_HOSTNAME:-quillquest}
+    depends_on: [proxy]
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?put a Tailscale auth key in .env}
+      TS_HOSTNAME: ${TS_HOSTNAME:-quillquest}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tsstate:/var/lib/tailscale
+      - ./tailscale-serve.json:/config/serve.json:ro
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  pgdata:
+  tsstate:

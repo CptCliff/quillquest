@@ -1,3 +1,4 @@
+import { issueTailnetToken, tailnetIdentity, type TailnetConfig } from '../auth/tailnet';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DbError, type Db } from '@quillquest/db';
 import { RuleViolation, CONCESSION_KINDS, type BurdenOutcome, type ConcessionKind } from '@quillquest/rules';
@@ -31,6 +32,8 @@ export interface RouteOptions {
   /** Present when accounts are backed by Postgres; the account and invite routes need it. */
   db?: Db;
   devDice: boolean;
+  /** Sign-in through the Tailscale proxy (POST /api/auth/tailnet); absent unless switched on. */
+  tailnet?: TailnetConfig;
   /** Called when someone's membership changes while they may be connected (they left), so their live sockets can be dropped. */
   onMembershipChange?: (campaign: string, userId: string) => void;
 }
@@ -118,6 +121,14 @@ export async function handleGameRequest(req: IncomingMessage, res: ServerRespons
       if (method === 'POST' && parts[3] === 'advance') { o.dev.mail.advance(Number((await readJson(req)).ms) || 0); return ok({ advanced: true }); }
       if (method === 'POST' && parts[3] === 'tick') return ok({ result: await o.dev.mail.tick() });
       throw new GameError(404, 'NOT_FOUND', 'No such route');
+    }
+
+    // Sign-in through the Tailscale proxy: no token yet, the proxy's verified headers are the credential.
+    if (parts[1] === 'auth' && parts[2] === 'tailnet' && method === 'POST') {
+      if (!o.tailnet) throw new GameError(404, 'NOT_FOUND', 'No such route');
+      const id = tailnetIdentity(req.headers, o.tailnet);
+      if (!id) throw new GameError(403, 'NOT_ON_TAILNET', 'This table is only open to people on its Tailscale network who are on the guest list');
+      return ok({ token: await issueTailnetToken(o.tailnet.secret, id), userId: id.userId, email: id.email, name: id.name, expiresIn: 12 * 3600 });
     }
 
     const claims = await identify(req, o);

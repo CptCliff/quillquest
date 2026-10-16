@@ -11,8 +11,8 @@ export const ILSE: Identity = { id: 'ilse', name: 'Ilse', role: 'player', color:
 export const SELLA: Identity = { id: 'sella', name: 'Sella', role: 'player', color: '#1d4ed8' };
 export const GM: Identity = { id: 'gm1', name: 'GM', role: 'gm', color: '#15803d' };
 
-export async function startServer(store = new MemoryStore(), game: { devDice?: boolean; playing?: boolean } = { devDice: true }, llm: LlmProvider | null = null, mail?: SyncServerOptions['mail']) {
-  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20, game: { devDice: game.devDice, store: game.playing ? new MemoryGameStore({ phase: 'playing' }) : undefined }, llm, mail });
+export async function startServer(store = new MemoryStore(), game: { devDice?: boolean; playing?: boolean } = { devDice: true }, llm: LlmProvider | null = null, mail?: SyncServerOptions['mail'], auth?: SyncServerOptions['auth']) {
+  const server = createSyncServer({ store, secret: SECRET, port: 0, debounceMs: 20, auth, game: { devDice: game.devDice, store: game.playing ? new MemoryGameStore({ phase: 'playing' }) : undefined }, llm, mail });
   await server.listen();
   return { server, store, url: server.webSocketURL, http: `http://127.0.0.1:${server.address.port}` };
 }

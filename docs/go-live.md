@@ -1,5 +1,7 @@
 # Going live: real sign-in, a real model, real mail
 
+Hosting it yourself for friends over Tailscale (no Supabase needed)? See `docs/self-hosting.md`; the checks below still apply to the model and mail.
+
 Everything so far has run against fakes. This is the shortest path to running against the real services, and a tool that tells you
 what is wrong before a player does. Only you can create the accounts and keys; nothing here needs them committed to the repo
 (put them in your host's environment settings or a local, untracked `.env`).

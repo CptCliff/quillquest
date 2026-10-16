@@ -1,4 +1,5 @@
 'use client';
+import { syncUrl } from '../lib/sync-url';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -11,7 +12,6 @@ import { DraftTable } from './DraftTable';
 import { Table } from './Table';
 
 const REJECTED_PREFIX = 'rejected:';
-const SYNC_URL = process.env.NEXT_PUBLIC_SYNC_URL ?? 'ws://localhost:1234';
 
 interface Connection { doc: Y.Doc; provider: HocuspocusProvider }
 
@@ -57,7 +57,7 @@ export function Workspace({ campaign, draft = false }: { campaign: string; draft
     let alive = true;
     const doc = new Y.Doc();
     const provider = new HocuspocusProvider({
-      url: SYNC_URL, name: draft && me ? `${campaign}~draft~${me.id}` : campaign, document: doc, token: () => session.getToken(),
+      url: syncUrl(), name: draft && me ? `${campaign}~draft~${me.id}` : campaign, document: doc, token: () => session.getToken(),
       onStatus: ({ status }) => alive && setStatus(status),
       onAuthenticationFailed: () => alive && setGate('denied'),
       onClose: ({ event }) => {

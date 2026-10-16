@@ -66,12 +66,13 @@ test('dragging a tab to the bottom or left of a pane moves the panel there, and 
   await expect(page.getByTestId('tab-roster')).toBeVisible();
   // The Codex tab onto the left edge of the Story pane.
   await dragTab(page, 'codex', 'story', 0.05, 0.4);
-  expect((await box(page, 'codex')).x).toBeLessThan((await box(page, 'story')).x);
+  await expect.poll(async () => (await box(page, 'codex')).x - (await box(page, 'story')).x).toBeLessThan(0);
   await saved(page);
   await page.reload();
   await expect(page.getByTestId('story')).toBeVisible();
-  expect((await box(page, 'codex')).x).toBeLessThan((await box(page, 'story')).x);
-  expect((await box(page, 'roster')).y).toBeGreaterThanOrEqual((await box(page, 'story')).y + (await box(page, 'story')).height - 3);
+  // The saved arrangement arrives a moment after the page: wait for it rather than measuring the default.
+  await expect.poll(async () => (await box(page, 'codex')).x - (await box(page, 'story')).x).toBeLessThan(0);
+  await expect.poll(async () => (await box(page, 'roster')).y - ((await box(page, 'story')).y + (await box(page, 'story')).height)).toBeGreaterThanOrEqual(-3);
   // Dropping on the centre of another pane stacks the tabs.
   await dragTab(page, 'codex', 'ledger', 0.5, 0.5);
   expect((await box(page, 'codex')).x).toBeCloseTo((await box(page, 'ledger')).x, 0);

@@ -38,7 +38,10 @@ export function SignIn({ heading = 'Sign in to Quillquest' }: { heading?: string
           ))}</ul>
         </div>
       )}
-      {!real && !dev && <p className="muted">Sign-in is not configured for this deployment yet.</p>}
+      {!real && !dev && session.state.status === 'out' && session.state.reason === 'not-on-tailnet' && (
+        <p role="alert" className="notice">This table is only open to people on its Tailscale network who are on the guest list. Check that Tailscale is connected, then reload; if it still says this, ask the host to add your Tailscale email.</p>
+      )}
+      {!real && !dev && !(session.state.status === 'out' && session.state.reason) && <p className="muted">Sign-in is not configured for this deployment yet.</p>}
       {error && <p role="alert" className="notice">{error}</p>}
     </section>
   );

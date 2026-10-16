@@ -5,6 +5,7 @@ import type { Db } from '@quillquest/db';
 import type { Identity } from './auth';
 import { DevProvider } from './auth/dev';
 import { buildAuthFromEnv, verifyToken } from './auth/env';
+import type { TailnetConfig } from './auth/tailnet';
 import type { AuthProvider } from './auth/types';
 import { PgDirectory, StaticDirectory, type Directory } from './directory';
 import { PgDocumentStore, PgGameStore } from './game/pg-stores';
@@ -37,7 +38,7 @@ export interface SyncServerOptions {
    * Who may connect. With a database, roles and colors come from memberships and the account routes are mounted; without
    * one, everyone is a member of every campaign with the role their dev token claims (tests and quick local runs only).
    */
-  auth?: { providers?: AuthProvider[]; directory?: Directory; db?: Db };
+  auth?: { providers?: AuthProvider[]; directory?: Directory; db?: Db; /** Sign-in through the Tailscale proxy: mounts POST /api/auth/tailnet. */ tailnet?: TailnetConfig };
   /** The game (cards, rolls, characters). Defaults to an in-memory store and random dice. */
   /** The language model behind the Claude assistant. Omitted means "not configured": its routes answer 501. */
   llm?: LlmProvider | null;
@@ -162,7 +163,7 @@ export function createSyncServer(opts: SyncServerOptions) {
       if ((conn.context as { identity?: Identity } | undefined)?.identity?.id === userId) conn.close({ code: 1000, reason: MEMBERSHIP_CHANGED });
     });
   };
-  game = (req, res) => handleGameRequest(req, res, { service, director, battles, layouts: db ? new PgLayoutStore(db) : layoutStore, notifyStore: notifier ? notifyStore : undefined, dev: opts.mail?.devRoutes && mailer instanceof FakeMailer ? { mail: { sent: () => mailer.sent, advance: (ms) => { clockOffset += ms; }, tick: jobs } } : undefined, dice, providers, directory, db, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
+  game = (req, res) => handleGameRequest(req, res, { service, director, battles, layouts: db ? new PgLayoutStore(db) : layoutStore, notifyStore: notifier ? notifyStore : undefined, dev: opts.mail?.devRoutes && mailer instanceof FakeMailer ? { mail: { sent: () => mailer.sent, advance: (ms) => { clockOffset += ms; }, tick: jobs } } : undefined, dice, providers, directory, db, tailnet: opts.auth?.tailnet, devDice: opts.game?.devDice ?? false, onMembershipChange: dropConnections });
   return Object.assign(server, { game: service, director, battles, notifier, jobs, mailer });
 }
 
@@ -170,7 +171,7 @@ export function createSyncServer(opts: SyncServerOptions) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const env = process.env;
   const port = Number(env.PORT ?? 1234);
-  const { providers, devAuth } = buildAuthFromEnv(env);
+  const { providers, devAuth, tailnet } = buildAuthFromEnv(env);
   const production = env.NODE_ENV === 'production';
   let db: Db | undefined;
   if (env.DATABASE_URL) {
@@ -194,7 +195,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dir = env.DATA_DIR ?? './data';
   const server = createSyncServer({
     store: db ? new PgDocumentStore(db) : new FileStore(dir), port, quiet: false,
-    auth: { providers, db },
+    auth: { providers, db, tailnet },
     llm: providerFromEnv(env, production),
     mail: { mailer: mailerFromEnv(env, production), publicUrl: env.QUILLQUEST_PUBLIC_URL, devRoutes: devAuth && env.QUILLQUEST_DEV_MAIL === '1' },
     game: { store: db ? undefined : new FileGameStore(dir), devDice: devAuth && env.QUILLQUEST_DEV_DICE === '1' },

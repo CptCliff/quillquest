@@ -1,0 +1,23 @@
+# The one door into the game. Tailscale hands it requests; it sends the live-editing socket and the game API to the sync server
+# and everything else to the web app. It adds the shared secret that tells the sync server a request came through here.
+:80 {
+	encode zstd gzip
+
+	@collab path /collab /collab/*
+	handle @collab {
+		uri strip_prefix /collab
+		reverse_proxy sync:1234 {
+			header_up X-Quillquest-Proxy {$QUILLQUEST_PROXY_SECRET}
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy sync:1234 {
+			header_up X-Quillquest-Proxy {$QUILLQUEST_PROXY_SECRET}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

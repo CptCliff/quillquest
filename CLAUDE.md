@@ -42,8 +42,9 @@ TEST_DATABASE_URL=postgres://... pnpm --filter @quillquest/db test   # the db su
   `apps/sync/src/notify/` (batching, presence, preferences, deep links), a 30-second background job (mail, push windows, stalls), public `battles` map. `docs/m7-notes.md`.
 - M9 chapter library: done. `packages/rules/src/chapter-library.ts` (24 original templates, keyword matcher), `offerChapter`/`pickChapterGrants`/`objectToPick` in `creation-flow.ts`, steps `chapter-offer|pick|object`, adapt via the `grant` kind with `adapt: true`. A writer's own pick applies at once; anyone else can object. `docs/m9-notes.md`.
 - Interface design pass: done. `packages/layout` (the dock model), saved layouts (`layouts` table, `/layout` routes), design tokens and themes (`app/tokens.css`), the dock (`components/dock/`), and an axe-core accessibility audit in Playwright. `docs/m8-notes.md`.
-- Test counts: 25 story, 22 layout, 306 rules, 16 prompts, 31 db, 147 sync, 16 web, 39 Playwright (the dock drag test is occasionally flaky).
+- Test counts: 25 story, 22 layout, 306 rules, 16 prompts, 31 db, 159 sync, 19 web, 39 Playwright (the dock drag test was flaky; its measurements now poll, not yet proven over many runs).
 - `pnpm --filter @quillquest/sync check:services` (`apps/sync/src/doctor.ts`, `docs/go-live.md`) checks real Supabase, model and mail settings before go-live; it needs real keys and has only been run against stubs and fakes.
+- Self-hosting for friends over Tailscale: `deploy/` (Docker Compose, Caddy, setup/backup/restore scripts), `docs/self-hosting.md`. Sign-in through Tailscale's identity headers is `apps/sync/src/auth/tailnet.ts` (`QUILLQUEST_AUTH_TAILNET=1`, `POST /api/auth/tailnet`); the browser's socket goes to `/collab` on the page's own address when `NEXT_PUBLIC_SYNC_URL` is unset in a production build (`apps/web/lib/sync-url.ts`). The images have never been built (no Docker daemon was available); the pieces were smoke-tested natively.
 - All seven milestones and the design pass are done. Next: playtest, real Supabase sign-in, and a real mail and model key.
 
 ## Gotchas
